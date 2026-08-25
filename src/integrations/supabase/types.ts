@@ -14,7 +14,330 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      dividends: {
+        Row: {
+          amount: number
+          amount_per_share: number
+          created_at: string
+          id: string
+          investment_id: string
+          payment_date: string
+          status: string
+          type: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          amount_per_share?: number
+          created_at?: string
+          id?: string
+          investment_id: string
+          payment_date?: string
+          status?: string
+          type?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          amount_per_share?: number
+          created_at?: string
+          id?: string
+          investment_id?: string
+          payment_date?: string
+          status?: string
+          type?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dividends_investment_id_fkey"
+            columns: ["investment_id"]
+            isOneToOne: false
+            referencedRelation: "investments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_goals: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          notes: string | null
+          target_amount: number
+          target_date: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          target_amount?: number
+          target_date?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          notes?: string | null
+          target_amount?: number
+          target_date?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      investments: {
+        Row: {
+          average_price: number
+          category: string
+          contract_rate: string | null
+          created_at: string
+          current_balance: number
+          current_price: number
+          due_date: string | null
+          id: string
+          indexer: string
+          initial_amount: number
+          institution: string
+          liquidity: string
+          name: string
+          notes: string | null
+          quantity: number
+          start_date: string
+          status: string
+          sub_type: string
+          tax_exempt: boolean
+          ticker: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          average_price?: number
+          category?: string
+          contract_rate?: string | null
+          created_at?: string
+          current_balance?: number
+          current_price?: number
+          due_date?: string | null
+          id?: string
+          indexer?: string
+          initial_amount?: number
+          institution?: string
+          liquidity?: string
+          name: string
+          notes?: string | null
+          quantity?: number
+          start_date?: string
+          status?: string
+          sub_type?: string
+          tax_exempt?: boolean
+          ticker?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          average_price?: number
+          category?: string
+          contract_rate?: string | null
+          created_at?: string
+          current_balance?: number
+          current_price?: number
+          due_date?: string | null
+          id?: string
+          indexer?: string
+          initial_amount?: number
+          institution?: string
+          liquidity?: string
+          name?: string
+          notes?: string | null
+          quantity?: number
+          start_date?: string
+          status?: string
+          sub_type?: string
+          tax_exempt?: boolean
+          ticker?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      monthly_snapshots: {
+        Row: {
+          cdi_benchmark: number
+          created_at: string
+          deposits: number
+          earnings: number
+          final_balance: number
+          ibovespa_benchmark: number
+          id: string
+          initial_balance: number
+          investment_id: string | null
+          ipca_benchmark: number
+          profit_amount: number
+          profit_percent: number
+          updated_at: string
+          user_id: string
+          withdrawals: number
+          year_month: string
+        }
+        Insert: {
+          cdi_benchmark?: number
+          created_at?: string
+          deposits?: number
+          earnings?: number
+          final_balance?: number
+          ibovespa_benchmark?: number
+          id?: string
+          initial_balance?: number
+          investment_id?: string | null
+          ipca_benchmark?: number
+          profit_amount?: number
+          profit_percent?: number
+          updated_at?: string
+          user_id: string
+          withdrawals?: number
+          year_month: string
+        }
+        Update: {
+          cdi_benchmark?: number
+          created_at?: string
+          deposits?: number
+          earnings?: number
+          final_balance?: number
+          ibovespa_benchmark?: number
+          id?: string
+          initial_balance?: number
+          investment_id?: string | null
+          ipca_benchmark?: number
+          profit_amount?: number
+          profit_percent?: number
+          updated_at?: string
+          user_id?: string
+          withdrawals?: number
+          year_month?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_snapshots_investment_id_fkey"
+            columns: ["investment_id"]
+            isOneToOne: false
+            referencedRelation: "investments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portfolio_targets: {
+        Row: {
+          category: string
+          created_at: string
+          id: string
+          target_percent: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          id?: string
+          target_percent?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          id?: string
+          target_percent?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          date: string
+          id: string
+          investment_id: string
+          notes: string | null
+          quantity: number
+          type: string
+          unit_price: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          date?: string
+          id?: string
+          investment_id: string
+          notes?: string | null
+          quantity?: number
+          type?: string
+          unit_price?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          date?: string
+          id?: string
+          investment_id?: string
+          notes?: string | null
+          quantity?: number
+          type?: string
+          unit_price?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_investment_id_fkey"
+            columns: ["investment_id"]
+            isOneToOne: false
+            referencedRelation: "investments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
