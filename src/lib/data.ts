@@ -78,7 +78,7 @@ function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
 export function useSaveRow(table: TableName) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, values }: { id?: string | null; values: Record<string, unknown> }) => {
+    mutationFn: async ({ id, values }: { id?: string | null | undefined; values: Record<string, unknown> }) => {
       if (id) {
         const { error } = await (supabase.from(table) as any).update(values).eq("id", id);
         if (error) throw error;

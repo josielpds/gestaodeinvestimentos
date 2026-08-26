@@ -81,7 +81,10 @@ export function formatDate(val: string | null | undefined): string {
 }
 
 export function monthLabel(yearMonth: string): string {
-  const [y, m] = yearMonth.split("-");
+  const parts = yearMonth.split("-");
+  const y = parts[0] ?? "";
+  const m = parts[1] ?? "";
+  if (!y || !m) return yearMonth;
   const names = [
     "jan",
     "fev",
@@ -204,7 +207,7 @@ export function summarize(
     grossProfitPercent: totalInvested > 0 ? ((totalGross - totalInvested) / totalInvested) * 100 : 0,
     byCategory: CATEGORIES.filter((c) => (catMap[c] ?? 0) > 0).map((c) => ({
       key: c,
-      label: CATEGORY_LABELS[c],
+      label: CATEGORY_LABELS[c] ?? c,
       value: catMap[c] ?? 0,
       percent: totalGross > 0 ? ((catMap[c] ?? 0) / totalGross) * 100 : 0,
     })),
