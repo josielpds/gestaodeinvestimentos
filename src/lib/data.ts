@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { Dividend, Goal, Investment, Snapshot, Target, Transaction } from "./finance";
+import type { Dividend, Goal, Investment, OpenFinanceConnection, Snapshot, Target, Transaction } from "./finance";
+import { getOpenFinanceConnections } from "./open-finance/pluggy";
 
 export type TableName =
   | "investments"
@@ -8,7 +9,8 @@ export type TableName =
   | "dividends"
   | "monthly_snapshots"
   | "portfolio_targets"
-  | "financial_goals";
+  | "financial_goals"
+  | "open_finance_connections";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 async function selectAll<T>(table: TableName, order: string, ascending = false): Promise<T[]> {
@@ -61,6 +63,13 @@ export function useGoals() {
   });
 }
 
+export function useOpenFinanceConnections() {
+  return useQuery({
+    queryKey: ["open_finance_connections"],
+    queryFn: () => getOpenFinanceConnections(),
+  });
+}
+
 function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
   for (const key of [
     "investments",
@@ -69,6 +78,7 @@ function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
     "monthly_snapshots",
     "portfolio_targets",
     "financial_goals",
+    "open_finance_connections",
   ]) {
     qc.invalidateQueries({ queryKey: [key] });
   }

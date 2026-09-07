@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   Trash2,
   TrendingUp,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { InvestmentDialog } from "@/components/investment-dialog";
 import { TransactionDialog } from "@/components/transaction-dialog";
-import { useDeleteRow, useInvestments, useTransactions } from "@/lib/data";
+import { OpenFinanceModal } from "@/components/open-finance-modal";
+import { useDeleteRow, useInvestments, useOpenFinanceConnections, useTransactions } from "@/lib/data";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -60,6 +62,7 @@ export const Route = createFileRoute("/_authenticated/investimentos")({
 function InvestimentosPage() {
   const { data: investments = [], isLoading } = useInvestments();
   const { data: transactions = [] } = useTransactions();
+  const { data: connections = [] } = useOpenFinanceConnections();
   const deleteInv = useDeleteRow("investments");
 
   const [search, setSearch] = useState("");
@@ -71,6 +74,8 @@ function InvestimentosPage() {
 
   const [txDialogOpen, setTxDialogOpen] = useState(false);
   const [txTargetInvId, setTxTargetInvId] = useState<string | null>(null);
+
+  const [openFinanceOpen, setOpenFinanceOpen] = useState(false);
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
@@ -148,9 +153,25 @@ function InvestimentosPage() {
             Gerencie CDBs, LCI, Tesouro, Ações, FIIs, Criptoativos e seus impostos estimados.
           </p>
         </div>
-        <Button onClick={handleOpenNew} size="sm">
-          <Plus className="mr-1.5 h-4 w-4" /> Novo Investimento
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setOpenFinanceOpen(true)}
+            variant="outline"
+            size="sm"
+            className="border-primary/30 hover:bg-primary/5 hover:text-primary relative"
+          >
+            <Zap className="mr-1.5 h-4 w-4 text-primary fill-primary/20" />
+            Open Finance
+            {connections.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-primary/20 text-primary px-1.5 py-0.2 text-[10px] font-bold">
+                {connections.length}
+              </span>
+            )}
+          </Button>
+          <Button onClick={handleOpenNew} size="sm">
+            <Plus className="mr-1.5 h-4 w-4" /> Novo Investimento
+          </Button>
+        </div>
       </div>
 
       {/* Cards de Métricas do Filtro */}
@@ -267,8 +288,19 @@ function InvestimentosPage() {
                     <tr key={inv.id} className="transition-colors hover:bg-surface/50">
                       {/* Ativo */}
                       <td className="py-3 pl-4 pr-3">
-                        <div className="font-semibold text-foreground">{inv.name}</div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-foreground">{inv.name}</span>
+                          {inv.is_automated && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] bg-primary/10 text-primary border-primary/20 gap-1 px-1.5 py-0 font-medium"
+                              title="Sincronizado via Open Finance"
+                            >
+                              <Zap className="h-2.5 w-2.5 fill-primary/20" /> Open Finance
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
                           {inv.ticker && (
                             <span className="rounded bg-primary/10 px-1 py-0.5 font-bold text-primary">
                               {inv.ticker}
@@ -408,6 +440,11 @@ function InvestimentosPage() {
         onOpenChange={setTxDialogOpen}
         investments={investments}
         defaultInvestmentId={txTargetInvId}
+      />
+
+      <OpenFinanceModal
+        open={openFinanceOpen}
+        onOpenChange={setOpenFinanceOpen}
       />
 
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>

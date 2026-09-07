@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   TrendingUp,
   Wallet,
+  Zap,
 } from "lucide-react";
 import {
   Cell,
@@ -33,7 +34,8 @@ import { InvestmentDialog } from "@/components/investment-dialog";
 import { TransactionDialog } from "@/components/transaction-dialog";
 import { DividendDialog } from "@/components/dividend-dialog";
 import { MonthlySnapshotDialog } from "@/components/monthly-snapshot-dialog";
-import { useDividends, useInvestments, useSnapshots, useTransactions } from "@/lib/data";
+import { OpenFinanceModal } from "@/components/open-finance-modal";
+import { useDividends, useInvestments, useOpenFinanceConnections, useSnapshots, useTransactions } from "@/lib/data";
 import {
   CATEGORY_CHART_VAR,
   CATEGORY_LABELS,
@@ -69,11 +71,13 @@ function DashboardPage() {
   const { data: transactions = [] } = useTransactions();
   const { data: dividends = [] } = useDividends();
   const { data: snapshots = [] } = useSnapshots();
+  const { data: connections = [] } = useOpenFinanceConnections();
 
   const [openInvDialog, setOpenInvDialog] = useState(false);
   const [openTxDialog, setOpenTxDialog] = useState(false);
   const [openDivDialog, setOpenDivDialog] = useState(false);
   const [openSnapDialog, setOpenSnapDialog] = useState(false);
+  const [openOfDialog, setOpenOfDialog] = useState(false);
 
   const summary = summarize(investments, transactions);
 
@@ -131,6 +135,20 @@ function DashboardPage() {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => setOpenOfDialog(true)}
+            variant="outline"
+            size="sm"
+            className="border-primary/30 hover:bg-primary/5 hover:text-primary relative"
+          >
+            <Zap className="mr-1.5 h-4 w-4 text-primary fill-primary/20" />
+            Open Finance
+            {connections.length > 0 && (
+              <span className="ml-1.5 rounded-full bg-primary/20 text-primary px-1.5 py-0.2 text-[10px] font-bold">
+                {connections.length}
+              </span>
+            )}
+          </Button>
           <Button onClick={() => setOpenInvDialog(true)} size="sm">
             <Plus className="mr-1.5 h-4 w-4" /> Novo Ativo
           </Button>
@@ -477,6 +495,10 @@ function DashboardPage() {
         open={openSnapDialog}
         onOpenChange={setOpenSnapDialog}
         defaultCurrentBalance={summary.totalGross}
+      />
+      <OpenFinanceModal
+        open={openOfDialog}
+        onOpenChange={setOpenOfDialog}
       />
     </div>
   );

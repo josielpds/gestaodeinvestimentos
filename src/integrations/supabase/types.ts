@@ -106,10 +106,13 @@ export type Database = {
           current_balance: number
           current_price: number
           due_date: string | null
+          connection_id: string | null
+          external_id: string | null
           id: string
           indexer: string
           initial_amount: number
           institution: string
+          is_automated: boolean
           liquidity: string
           name: string
           notes: string | null
@@ -125,15 +128,18 @@ export type Database = {
         Insert: {
           average_price?: number
           category?: string
+          connection_id?: string | null
           contract_rate?: string | null
           created_at?: string
           current_balance?: number
           current_price?: number
           due_date?: string | null
+          external_id?: string | null
           id?: string
           indexer?: string
           initial_amount?: number
           institution?: string
+          is_automated?: boolean
           liquidity?: string
           name: string
           notes?: string | null
@@ -149,15 +155,18 @@ export type Database = {
         Update: {
           average_price?: number
           category?: string
+          connection_id?: string | null
           contract_rate?: string | null
           created_at?: string
           current_balance?: number
           current_price?: number
           due_date?: string | null
+          external_id?: string | null
           id?: string
           indexer?: string
           initial_amount?: number
           institution?: string
+          is_automated?: boolean
           liquidity?: string
           name?: string
           notes?: string | null
@@ -167,6 +176,53 @@ export type Database = {
           sub_type?: string
           tax_exempt?: boolean
           ticker?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "investments_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "open_finance_connections"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      open_finance_connections: {
+        Row: {
+          connector_id: number | null
+          created_at: string
+          id: string
+          institution_logo: string | null
+          institution_name: string
+          item_id: string
+          last_synced_at: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          connector_id?: number | null
+          created_at?: string
+          id?: string
+          institution_logo?: string | null
+          institution_name: string
+          item_id: string
+          last_synced_at?: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          connector_id?: number | null
+          created_at?: string
+          id?: string
+          institution_logo?: string | null
+          institution_name?: string
+          item_id?: string
+          last_synced_at?: string
+          status?: string
           updated_at?: string
           user_id?: string
         }

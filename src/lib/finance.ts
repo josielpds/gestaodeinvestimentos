@@ -6,6 +6,7 @@ export type Dividend = Tables<"dividends">;
 export type Snapshot = Tables<"monthly_snapshots">;
 export type Target = Tables<"portfolio_targets">;
 export type Goal = Tables<"financial_goals">;
+export type OpenFinanceConnection = Tables<"open_finance_connections">;
 
 export const CATEGORIES = ["renda_fixa", "renda_variavel", "internacional", "cripto"] as const;
 
