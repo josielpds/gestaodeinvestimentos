@@ -43,6 +43,9 @@ jobs:
           SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsZ2xoYmdqaXlpdnNudXplc3NiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2ODc1NDMsImV4cCI6MjEwMzI2MzU0M30.gu4r_9jNa6TZ--UjFbPvJfvINJivBGrRwTDd_gxSu8s' }}
         run: npm run build
 
+      - name: Prepare static files for GitHub Pages
+        run: node scripts/prepare-github-pages.mjs
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
