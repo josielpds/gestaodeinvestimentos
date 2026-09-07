@@ -15,9 +15,3 @@ Um sistema moderno, completo e intuitivo para gerenciamento de investimentos fin
 - **📑 Relatórios & Extratos**: Exportação de dados e extratos detalhados para declaração de IRPF e auditoria pessoal.
 - **🌐 Open Finance (Pluggy API)**: Sincronização automatizada de contas e investimentos bancários.
 - **🔐 Segurança Total**: Autenticação nativa com Supabase Auth e Row Level Security (RLS) garantindo isolamento estrito dos dados por usuário.
-
-## 🔒 Boas Práticas de Segurança
-
-- Todas as tabelas do PostgreSQL utilizam **Row Level Security (RLS)**, garantindo que cada usuário só acesse suas próprias informações (`auth.uid() = user_id`).
-- Segredos de backend (como `PLUGGY_CLIENT_SECRET`) são processados estritamente em Server Functions do TanStack Start.
-- O `.gitignore` protege todos os arquivos de configuração local e chaves secretas.
