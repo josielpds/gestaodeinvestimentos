@@ -69,8 +69,11 @@ export function MonthlyYieldReport({
   snapshots,
 }: MonthlyYieldReportProps) {
   const currentYM = currentYearMonth();
+  const currentYear = new Date().getFullYear().toString();
 
-  // Lista de meses disponíveis para seleção
+  const [periodMode, setPeriodMode] = useState<"mensal" | "anual">("mensal");
+
+  // Lista de meses disponíveis
   const availableMonths = useMemo(() => {
     const set = new Set<string>();
     set.add(currentYM);
@@ -82,7 +85,6 @@ export function MonthlyYieldReport({
       if (d.payment_date) set.add(d.payment_date.slice(0, 7));
     }
 
-    // Se tiver poucos meses, gerar últimos 6 meses para conveniência
     const now = new Date();
     for (let i = 0; i < 6; i++) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
@@ -92,9 +94,27 @@ export function MonthlyYieldReport({
     return Array.from(set).sort((a, b) => (a > b ? -1 : 1));
   }, [snapshots, transactions, dividends, currentYM]);
 
+  // Lista de anos disponíveis
+  const availableYears = useMemo(() => {
+    const set = new Set<string>();
+    set.add(currentYear);
+    for (const s of snapshots) set.add(s.year_month.slice(0, 4));
+    for (const t of transactions) {
+      if (t.date) set.add(t.date.slice(0, 4));
+    }
+    for (const d of dividends) {
+      if (d.payment_date) set.add(d.payment_date.slice(0, 4));
+    }
+    for (const i of investments) {
+      if (i.start_date) set.add(i.start_date.slice(0, 4));
+    }
+    return Array.from(set).sort((a, b) => (a > b ? -1 : 1));
+  }, [snapshots, transactions, dividends, investments, currentYear]);
+
   const [selectedMonth, setSelectedMonth] = useState<string>(
     snapshots.length > 0 ? snapshots[0]?.year_month ?? currentYM : currentYM,
   );
+  const [selectedYear, setSelectedYear] = useState<string>(currentYear);
   const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
 
   // Snapshot consolidado para o mês selecionado (se houver)
@@ -126,7 +146,6 @@ export function MonthlyYieldReport({
     const isConsolidated = !!snapshotForMonth;
     const isCurrentMonth = selectedMonth === currentYM;
 
-    // Aportes e resgates do mês pelas transações
     const txDeposits = monthTransactions
       .filter((t) => t.type === "aporte")
       .reduce((acc, t) => acc + t.amount, 0);
@@ -141,7 +160,6 @@ export function MonthlyYieldReport({
 
     const totalDividends = monthDividends.reduce((acc, d) => acc + d.amount, 0);
 
-    // Saldo atual dos ativos
     const totalCurrentGross = investments
       .filter((i) => i.status === "ativo")
       .reduce((acc, i) => acc + i.current_balance, 0);
@@ -152,7 +170,7 @@ export function MonthlyYieldReport({
     let withdrawals = 0;
     let profitAmount = 0;
     let profitPercent = 0;
-    let cdiBenchmark = 0.95; // CDI padrão aproximado mensal
+    let cdiBenchmark = 0.95;
     let ipcaBenchmark = 0.40;
     let ibovespaBenchmark = 1.20;
 
@@ -182,17 +200,13 @@ export function MonthlyYieldReport({
         finalBalance = initialBalance + deposits - withdrawals + totalDividends + txRFEarnings;
       }
 
-      // Rendimento em R$ = Saldo Final - (Saldo Inicial + Aportes - Resgates)
       profitAmount = finalBalance - (initialBalance + deposits - withdrawals);
 
-      // Base média investida ponderada para percentual
       const baseInvested = initialBalance + (deposits - withdrawals) / 2;
       profitPercent = baseInvested > 0 ? (profitAmount / baseInvested) * 100 : 0;
     }
 
-    // % do CDI alcançado
     const percentOfCdi = cdiBenchmark > 0 ? (profitPercent / cdiBenchmark) * 100 : 0;
-    // Ganho Real acima da Inflação
     const realReturn = profitPercent - ipcaBenchmark;
 
     return {
@@ -221,6 +235,129 @@ export function MonthlyYieldReport({
     investments,
     previousSnapshot,
   ]);
+
+  // CÁLCULOS DO RELATÓRIO ANUAL
+  const annualReportData = useMemo(() => {
+    const monthNames = [
+      "01", "02", "03", "04", "05", "06",
+      "07", "08", "09", "10", "11", "12",
+    ];
+
+    let totalProfitAmount = 0;
+    let totalDeposits = 0;
+    let totalWithdrawals = 0;
+    let totalDividends = 0;
+    let initialYearBalance = 0;
+    let finalYearBalance = 0;
+
+    let compoundReturnFactor = 1.0;
+    let compoundCdiFactor = 1.0;
+    let compoundIpcaFactor = 1.0;
+    let compoundIbovFactor = 1.0;
+
+    const monthlyBreakdown = monthNames.map((mNum) => {
+      const ym = `${selectedYear}-${mNum}`;
+      const snap = snapshots.find((s) => s.year_month === ym);
+
+      const txs = transactions.filter((t) => t.date && t.date.startsWith(ym));
+      const mDeposits = snap
+        ? snap.deposits
+        : txs.filter((t) => t.type === "aporte").reduce((a, t) => a + t.amount, 0);
+      const mWithdrawals = snap
+        ? snap.withdrawals
+        : txs.filter((t) => t.type === "resgate").reduce((a, t) => a + t.amount, 0);
+
+      const mDivs = dividends
+        .filter((d) => d.payment_date && d.payment_date.startsWith(ym) && d.status === "recebido")
+        .reduce((a, d) => a + d.amount, 0);
+
+      let mProfitAmount = 0;
+      let mProfitPercent = 0;
+      let mFinalBalance = 0;
+      let mCdi = 0.95;
+      let mIpca = 0.40;
+      let mIbov = 1.00;
+      let hasData = false;
+
+      if (snap) {
+        hasData = true;
+        mProfitAmount = snap.profit_amount;
+        mProfitPercent = snap.profit_percent;
+        mFinalBalance = snap.final_balance;
+        mCdi = snap.cdi_benchmark || 0.95;
+        mIpca = snap.ipca_benchmark || 0.40;
+        mIbov = snap.ibovespa_benchmark || 1.00;
+      } else if (ym === currentYM) {
+        hasData = true;
+        mProfitAmount = monthReportData.profitAmount;
+        mProfitPercent = monthReportData.profitPercent;
+        mFinalBalance = monthReportData.finalBalance;
+        mCdi = monthReportData.cdiBenchmark;
+        mIpca = monthReportData.ipcaBenchmark;
+        mIbov = monthReportData.ibovespaBenchmark;
+      } else if (mDeposits > 0 || mWithdrawals > 0 || mDivs > 0) {
+        hasData = true;
+        mProfitAmount = mDivs;
+        mProfitPercent = 0.8;
+      }
+
+      if (hasData) {
+        totalProfitAmount += mProfitAmount;
+        totalDeposits += mDeposits;
+        totalWithdrawals += mWithdrawals;
+        totalDividends += mDivs;
+
+        if (initialYearBalance === 0 && (snap?.initial_balance || mFinalBalance)) {
+          initialYearBalance = snap?.initial_balance || mFinalBalance;
+        }
+        if (mFinalBalance > 0) {
+          finalYearBalance = mFinalBalance;
+        }
+
+        compoundReturnFactor *= 1 + mProfitPercent / 100;
+        compoundCdiFactor *= 1 + mCdi / 100;
+        compoundIpcaFactor *= 1 + mIpca / 100;
+        compoundIbovFactor *= 1 + mIbov / 100;
+      }
+
+      return {
+        mes: monthLabel(ym),
+        ym,
+        profitAmount: mProfitAmount,
+        profitPercent: mProfitPercent,
+        deposits: mDeposits,
+        withdrawals: mWithdrawals,
+        dividends: mDivs,
+        finalBalance: mFinalBalance,
+        cdi: mCdi,
+        hasData,
+      };
+    });
+
+    const yearProfitPercent = (compoundReturnFactor - 1) * 100;
+    const yearCdiPercent = (compoundCdiFactor - 1) * 100;
+    const yearIpcaPercent = (compoundIpcaFactor - 1) * 100;
+    const yearIbovPercent = (compoundIbovFactor - 1) * 100;
+    const yearPercentOfCdi = yearCdiPercent > 0 ? (yearProfitPercent / yearCdiPercent) * 100 : 0;
+    const yearRealReturn = yearProfitPercent - yearIpcaPercent;
+
+    return {
+      selectedYear,
+      totalProfitAmount,
+      totalDeposits,
+      totalWithdrawals,
+      totalDividends,
+      initialYearBalance,
+      finalYearBalance: finalYearBalance || investments.reduce((a, i) => a + i.current_balance, 0),
+      yearProfitPercent,
+      yearCdiPercent,
+      yearIpcaPercent,
+      yearIbovPercent,
+      yearPercentOfCdi,
+      yearRealReturn,
+      monthlyBreakdown,
+    };
+  }, [selectedYear, snapshots, transactions, dividends, investments, currentYM, monthReportData]);
 
   // Rendimento por Categoria / Classe no Mês
   const categoryYieldBreakdown = useMemo(() => {
@@ -277,14 +414,12 @@ export function MonthlyYieldReport({
       },
     };
 
-    // Alocar saldos
     for (const inv of active) {
       if (catMap[inv.category]) {
         catMap[inv.category].currentBalance += inv.current_balance;
       }
     }
 
-    // Alocar proventos do mês por categoria
     for (const d of monthDividends) {
       const inv = investments.find((i) => i.id === d.investment_id);
       if (inv && catMap[inv.category]) {
@@ -292,10 +427,8 @@ export function MonthlyYieldReport({
       }
     }
 
-    // Proporção de rendimento no mês
     for (const cat of Object.values(catMap)) {
       cat.weightPercent = (cat.currentBalance / totalGross) * 100;
-      // Estimativa ponderada de lucro por classe
       if (cat.currentBalance > 0) {
         cat.estimatedProfitAmount = (monthReportData.profitAmount * cat.weightPercent) / 100;
         cat.profitPercent =
@@ -325,13 +458,11 @@ export function MonthlyYieldReport({
           .filter((d) => d.investment_id === inv.id)
           .reduce((a, d) => a + d.amount, 0);
 
-        // Participação na carteira
         const sharePercent =
           monthReportData.finalBalance > 0
             ? (inv.current_balance / monthReportData.finalBalance) * 100
             : 0;
 
-        // Rendimento estimado do ativo no mês proporcional ou com base nos proventos
         const assetProfitAmount =
           (monthReportData.profitAmount * sharePercent) / 100 + invDividends;
         const assetProfitPercent =
@@ -351,9 +482,8 @@ export function MonthlyYieldReport({
       .sort((a, b) => b.currentBalance - a.currentBalance);
   }, [investments, monthTransactions, monthDividends, monthReportData]);
 
-  // Histórico dos últimos meses para gráficos comparativos
+  // Histórico dos últimos meses para gráficos
   const historicalChartData = useMemo(() => {
-    // Combinar snapshots com o mês selecionado
     const map = new Map<string, { mes: string; lucroRs: number; rentabilidadePct: number; cdiPct: number }>();
 
     for (const s of snapshots) {
@@ -365,7 +495,6 @@ export function MonthlyYieldReport({
       });
     }
 
-    // Se o mês atual não tiver snapshot, adicionar estimativa
     if (!map.has(selectedMonth)) {
       map.set(selectedMonth, {
         mes: monthLabel(selectedMonth),
@@ -384,47 +513,55 @@ export function MonthlyYieldReport({
   // Função para exportar CSV
   function handleExportCSV() {
     try {
-      const headers = [
-        "Mês",
-        "Saldo Inicial (R$)",
-        "Aportes (R$)",
-        "Resgates (R$)",
-        "Saldo Final (R$)",
-        "Rendimento no Mês (R$)",
-        "Rentabilidade no Mês (%)",
-        "Proventos Recebidos (R$)",
-        "CDI (%)",
-        "Status",
-      ];
+      const headers =
+        periodMode === "mensal"
+          ? [
+              "Mês",
+              "Saldo Inicial (R$)",
+              "Aportes (R$)",
+              "Resgates (R$)",
+              "Saldo Final (R$)",
+              "Rendimento no Mês (R$)",
+              "Rentabilidade no Mês (%)",
+              "Proventos Recebidos (R$)",
+              "CDI (%)",
+              "Status",
+            ]
+          : [
+              "Mês / Ano",
+              "Aportes (R$)",
+              "Resgates (R$)",
+              "Proventos (R$)",
+              "Saldo Final (R$)",
+              "Rendimento (R$)",
+              "Rentabilidade (%)",
+              "CDI (%)",
+            ];
 
-      const rows = snapshots.map((s) => [
-        monthLabel(s.year_month),
-        s.initial_balance.toFixed(2),
-        s.deposits.toFixed(2),
-        s.withdrawals.toFixed(2),
-        s.final_balance.toFixed(2),
-        s.profit_amount.toFixed(2),
-        s.profit_percent.toFixed(2),
-        (s.earnings || 0).toFixed(2),
-        (s.cdi_benchmark || 0).toFixed(2),
-        "Consolidado",
-      ]);
-
-      // Adicionar linha do mês atual se não estiver nos snapshots
-      if (!snapshotForMonth) {
-        rows.push([
-          monthLabel(selectedMonth),
-          monthReportData.initialBalance.toFixed(2),
-          monthReportData.deposits.toFixed(2),
-          monthReportData.withdrawals.toFixed(2),
-          monthReportData.finalBalance.toFixed(2),
-          monthReportData.profitAmount.toFixed(2),
-          monthReportData.profitPercent.toFixed(2),
-          monthReportData.totalDividends.toFixed(2),
-          monthReportData.cdiBenchmark.toFixed(2),
-          "Estimado / Em Aberto",
-        ]);
-      }
+      const rows =
+        periodMode === "mensal"
+          ? snapshots.map((s) => [
+              monthLabel(s.year_month),
+              s.initial_balance.toFixed(2),
+              s.deposits.toFixed(2),
+              s.withdrawals.toFixed(2),
+              s.final_balance.toFixed(2),
+              s.profit_amount.toFixed(2),
+              s.profit_percent.toFixed(2),
+              (s.earnings || 0).toFixed(2),
+              (s.cdi_benchmark || 0).toFixed(2),
+              "Consolidado",
+            ])
+          : annualReportData.monthlyBreakdown.map((m) => [
+              m.mes,
+              m.deposits.toFixed(2),
+              m.withdrawals.toFixed(2),
+              m.dividends.toFixed(2),
+              m.finalBalance.toFixed(2),
+              m.profitAmount.toFixed(2),
+              m.profitPercent.toFixed(2),
+              m.cdi.toFixed(2),
+            ]);
 
       const csvContent =
         "data:text/csv;charset=utf-8," +
@@ -433,7 +570,10 @@ export function MonthlyYieldReport({
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `relatorio-rendimento-${selectedMonth}.csv`);
+      link.setAttribute(
+        "download",
+        `relatorio-${periodMode}-${periodMode === "mensal" ? selectedMonth : selectedYear}.csv`,
+      );
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -443,16 +583,16 @@ export function MonthlyYieldReport({
     }
   }
 
-  // Função para imprimir relatório
   function handlePrint() {
     window.print();
   }
 
-  const isProfitPositive = monthReportData.profitAmount >= 0;
+  const isMonthProfitPositive = monthReportData.profitAmount >= 0;
+  const isYearProfitPositive = annualReportData.totalProfitAmount >= 0;
 
   return (
     <div className="space-y-6">
-      {/* SELETOR DE MÊS & AÇÕES DO RELATÓRIO */}
+      {/* SELETOR DE MODO (MENSAL VS ANUAL) E AÇÕES */}
       <div className="panel p-5 print:border-none print:shadow-none print:p-0">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div className="space-y-1">
@@ -461,49 +601,99 @@ export function MonthlyYieldReport({
                 <BarChart3 className="h-4 w-4" />
               </span>
               <h2 className="text-lg font-bold text-foreground">
-                Relatório de Rendimento & Rentabilidade Mensal
+                {periodMode === "mensal"
+                  ? "Relatório de Rendimento & Rentabilidade Mensal"
+                  : `Relatório de Rendimento & Rentabilidade Anual (${selectedYear})`}
               </h2>
             </div>
             <p className="text-xs text-muted-foreground">
-              Demonstrativo detalhado do lucro em Reais (R$) e retorno percentual (%) auferido no período.
+              {periodMode === "mensal"
+                ? "Demonstrativo em tempo real e fechamentos do lucro em Reais (R$) e retorno percentual (%)."
+                : "Consolidado anual acumulado de rendimento monetário, retorno ponderado, proventos e benchmarks."}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 print:hidden">
-            {/* Seletor do Mês */}
-            <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-1.5">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground">Mês de Referência:</span>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent text-xs font-bold text-primary focus:outline-none cursor-pointer"
+            {/* Toggle Mensal / Anual */}
+            <div className="flex items-center rounded-xl border border-border bg-surface p-1">
+              <button
+                type="button"
+                onClick={() => setPeriodMode("mensal")}
+                className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                  periodMode === "mensal"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
-                {availableMonths.map((m) => (
-                  <option key={m} value={m} className="bg-card text-foreground">
-                    {monthLabel(m)} {m === currentYM ? "(Mês Atual)" : ""}
-                  </option>
-                ))}
-              </select>
+                Visão Mensal
+              </button>
+              <button
+                type="button"
+                onClick={() => setPeriodMode("anual")}
+                className={`rounded-lg px-3 py-1 text-xs font-semibold transition-all ${
+                  periodMode === "anual"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Visão Anual
+              </button>
             </div>
 
-            {/* Status do Mês */}
-            {monthReportData.isConsolidated ? (
-              <Badge variant="outline" className="border-success/30 bg-success/10 text-success text-[11px] py-1">
-                <CheckCircle2 className="mr-1 h-3 w-3" /> Fechamento Consolidado
-              </Badge>
+            {/* Seletor do Mês ou Ano */}
+            {periodMode === "mensal" ? (
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-1.5">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Mês:</span>
+                <select
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-primary focus:outline-none cursor-pointer"
+                >
+                  {availableMonths.map((m) => (
+                    <option key={m} value={m} className="bg-card text-foreground">
+                      {monthLabel(m)} {m === currentYM ? "(Em andamento)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
             ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setSnapshotDialogOpen(true)}
-                className="text-xs border-warning/30 bg-warning/10 text-warning hover:bg-warning/20"
-              >
-                <Clock className="mr-1.5 h-3.5 w-3.5" /> Mês em Aberto · Consolidar
-              </Button>
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-1.5">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Ano:</span>
+                <select
+                  value={selectedYear}
+                  onChange={(e) => setSelectedYear(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-primary focus:outline-none cursor-pointer"
+                >
+                  {availableYears.map((y) => (
+                    <option key={y} value={y} className="bg-card text-foreground">
+                      Ano de {y} {y === currentYear ? "(Ano Atual)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
 
-            {/* Ações de Impressão e Download */}
+            {/* Status do Mês (se mensal) */}
+            {periodMode === "mensal" && (
+              monthReportData.isConsolidated ? (
+                <Badge variant="outline" className="border-success/30 bg-success/10 text-success text-[11px] py-1">
+                  <CheckCircle2 className="mr-1 h-3 w-3" /> Fechamento Consolidado
+                </Badge>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSnapshotDialogOpen(true)}
+                  className="text-xs border-warning/30 bg-warning/10 text-warning hover:bg-warning/20"
+                >
+                  <Clock className="mr-1.5 h-3.5 w-3.5" /> Mês em Aberto · Consolidar
+                </Button>
+              )
+            )}
+
+            {/* Ações */}
             <Button variant="outline" size="sm" onClick={handleExportCSV} title="Exportar para Excel / CSV">
               <FileSpreadsheet className="mr-1.5 h-4 w-4 text-success" /> CSV
             </Button>
@@ -514,7 +704,7 @@ export function MonthlyYieldReport({
         </div>
       </div>
 
-      {/* CABEÇALHO PARA IMPRESSÃO (visível apenas na impressão) */}
+      {/* CABEÇALHO PARA IMPRESSÃO */}
       <div className="hidden print:block border-b border-border pb-4 space-y-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -522,509 +712,807 @@ export function MonthlyYieldReport({
               F
             </div>
             <div>
-              <h1 className="text-xl font-bold">Finantria Invest — Relatório Gerencial</h1>
-              <p className="text-xs text-muted-foreground">Gestão Consolidada de Investimentos</p>
+              <h1 className="text-xl font-bold">Finantria Invest — Relatório de Rendimentos</h1>
+              <p className="text-xs text-muted-foreground">
+                {periodMode === "mensal"
+                  ? `Mês: ${monthLabel(selectedMonth)}`
+                  : `Ano Consolidado: ${selectedYear}`}
+              </p>
             </div>
           </div>
           <div className="text-right text-xs">
-            <p className="font-bold">Mês de Referência: {monthLabel(selectedMonth)}</p>
-            <p className="text-muted-foreground">Emissão: {formatDate(todayISO())}</p>
+            <p className="font-bold">Emissão: {formatDate(todayISO())}</p>
           </div>
         </div>
       </div>
 
-      {/* CARDS PRINCIPAIS: RENDIMENTO EM R$ E % */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* CARD 1: Rendimento em Reais (R$) */}
-        <div className="panel p-5 relative overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Rendimento no Mês (R$)
-              </p>
-              <p
-                className={`num text-2xl sm:text-3xl font-bold mt-1.5 ${
-                  isProfitPositive ? "text-success" : "text-destructive"
-                }`}
-              >
-                {isProfitPositive ? `+ ${formatCurrency(monthReportData.profitAmount)}` : formatCurrency(monthReportData.profitAmount)}
-              </p>
-            </div>
-            <div
-              className={`flex h-10 w-10 items-center justify-center rounded-xl ${
-                isProfitPositive ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"
-              }`}
-            >
-              {isProfitPositive ? <ArrowUpRight className="h-6 w-6" /> : <ArrowDownRight className="h-6 w-6" />}
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Proventos no Mês:</span>
-            <span className="font-bold text-foreground">
-              {formatCurrency(monthReportData.totalDividends)}
-            </span>
-          </div>
-        </div>
-
-        {/* CARD 2: Rentabilidade em Porcentagem (%) */}
-        <div className="panel p-5 relative overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Rentabilidade no Mês (%)
-              </p>
-              <p
-                className={`num text-2xl sm:text-3xl font-bold mt-1.5 ${
-                  isProfitPositive ? "text-success" : "text-destructive"
-                }`}
-              >
-                {formatPercent(monthReportData.profitPercent)}
-              </p>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
-              <Percent className="h-6 w-6" />
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Desempenho vs CDI:</span>
-            <span
-              className={`font-bold ${
-                monthReportData.percentOfCdi >= 100 ? "text-success" : "text-warning"
-              }`}
-            >
-              {monthReportData.percentOfCdi.toFixed(1)}% do CDI
-            </span>
-          </div>
-        </div>
-
-        {/* CARD 3: Patrimônio & Variação */}
-        <div className="panel p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Patrimônio Final ({monthLabel(selectedMonth)})
-              </p>
-              <p className="num text-2xl sm:text-3xl font-bold text-foreground mt-1.5">
-                {formatCurrency(monthReportData.finalBalance)}
-              </p>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-strong text-muted-foreground">
-              <Wallet className="h-5 w-5" />
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Saldo Inicial do Mês:</span>
-            <span className="num font-semibold text-muted-foreground">
-              {formatCurrency(monthReportData.initialBalance)}
-            </span>
-          </div>
-        </div>
-
-        {/* CARD 4: Fluxo de Aportes vs Resgates */}
-        <div className="panel p-5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Aportes Líquidos no Mês
-              </p>
-              <p className="num text-2xl sm:text-3xl font-bold text-primary mt-1.5">
-                {formatCurrency(monthReportData.deposits - monthReportData.withdrawals)}
-              </p>
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-strong text-muted-foreground">
-              <Calendar className="h-5 w-5" />
-            </div>
-          </div>
-
-          <div className="mt-4 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
-            <div>
-              <span className="text-muted-foreground">Aportes: </span>
-              <span className="num font-bold text-success">+{formatCurrency(monthReportData.deposits)}</span>
-            </div>
-            <div className="text-right">
-              <span className="text-muted-foreground">Resgates: </span>
-              <span className="num font-bold text-destructive">-{formatCurrency(monthReportData.withdrawals)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* COMPARATIVO COM BENCHMARKS DE MERCADO */}
-      <div className="panel p-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3 gap-2">
-          <div>
-            <h3 className="text-base font-bold text-foreground">
-              Comparativo de Desempenho do Mês vs Benchmarks
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Como sua carteira performou em relação aos principais indicadores da economia brasileira.
-            </p>
-          </div>
-          <Badge variant="outline" className="w-fit text-xs font-semibold">
-            {monthLabel(selectedMonth)}
-          </Badge>
-        </div>
-
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {/* Carteira Finantria */}
-          <div className="rounded-xl border-2 border-primary bg-primary/5 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-primary uppercase">Sua Carteira</span>
-              <Sparkles className="h-4 w-4 text-primary" />
-            </div>
-            <p className={`num text-2xl font-bold ${isProfitPositive ? "text-success" : "text-destructive"}`}>
-              {formatPercent(monthReportData.profitPercent)}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              Rendimento em R$: <span className="font-bold text-foreground">{formatCurrency(monthReportData.profitAmount)}</span>
-            </p>
-          </div>
-
-          {/* CDI */}
-          <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase">CDI</span>
-              <Landmark className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <p className="num text-2xl font-bold text-foreground">
-              {formatPercent(monthReportData.cdiBenchmark)}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              Sua carteira: <span className="font-bold text-primary">{monthReportData.percentOfCdi.toFixed(1)}% do CDI</span>
-            </p>
-          </div>
-
-          {/* IPCA (Inflação) */}
-          <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase">IPCA (Inflação)</span>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <p className="num text-2xl font-bold text-foreground">
-              {formatPercent(monthReportData.ipcaBenchmark)}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              Ganho Real (acima inflação):{" "}
-              <span className={`font-bold ${monthReportData.realReturn >= 0 ? "text-success" : "text-destructive"}`}>
-                {formatPercent(monthReportData.realReturn)}
-              </span>
-            </p>
-          </div>
-
-          {/* Ibovespa */}
-          <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-muted-foreground uppercase">Ibovespa (B3)</span>
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            </div>
-            <p className="num text-2xl font-bold text-foreground">
-              {formatPercent(monthReportData.ibovespaBenchmark)}
-            </p>
-            <p className="text-[11px] text-muted-foreground">
-              Spread vs Bolsa:{" "}
-              <span className="font-bold text-foreground">
-                {formatPercent(monthReportData.profitPercent - monthReportData.ibovespaBenchmark)}
-              </span>
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* GRÁFICOS: RENDIMENTO EM R$ E % MÊS A MÊS */}
-      <div className="grid gap-6 lg:grid-cols-2 print:break-inside-avoid">
-        {/* Gráfico de Lucro / Rendimento em Reais */}
-        <div className="panel p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold">Rendimento em Reais (R$) por Mês</h3>
-              <p className="text-xs text-muted-foreground">
-                Histórico do resultado financeiro monetário gerado
-              </p>
-            </div>
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-          </div>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={historicalChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
-                <XAxis
-                  dataKey="mes"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
-                  tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
-                />
-                <RechartsTooltip
-                  formatter={(val: number) => [formatCurrency(val), "Rendimento"]}
-                  contentStyle={{
-                    backgroundColor: "var(--color-card)",
-                    borderColor: "var(--color-border)",
-                    borderRadius: "0.75rem",
-                  }}
-                />
-                <Bar dataKey="lucroRs" radius={[4, 4, 0, 0]}>
-                  {historicalChartData.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.lucroRs >= 0 ? "var(--color-success)" : "var(--color-destructive)"}
-                    />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Gráfico de Rentabilidade Percentual vs CDI */}
-        <div className="panel p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-base font-bold">Rentabilidade (%) vs CDI</h3>
-              <p className="text-xs text-muted-foreground">
-                Comparação percentual da carteira vs taxa livre de risco
-              </p>
-            </div>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </div>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={historicalChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
-                <XAxis
-                  dataKey="mes"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
-                  tickFormatter={(v) => `${v.toFixed(1)}%`}
-                />
-                <RechartsTooltip
-                  formatter={(val: number, name: string) => [
-                    `${val.toFixed(2)}%`,
-                    name === "rentabilidadePct" ? "Sua Carteira" : "CDI",
-                  ]}
-                  contentStyle={{
-                    backgroundColor: "var(--color-card)",
-                    borderColor: "var(--color-border)",
-                    borderRadius: "0.75rem",
-                  }}
-                />
-                <Legend
-                  formatter={(value) => (value === "rentabilidadePct" ? "Sua Carteira (%)" : "CDI (%)")}
-                  wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="rentabilidadePct"
-                  stroke="var(--color-primary)"
-                  strokeWidth={2.5}
-                  dot={{ r: 4, fill: "var(--color-primary)" }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="cdiPct"
-                  stroke="var(--color-muted-foreground)"
-                  strokeWidth={2}
-                  strokeDasharray="4 4"
-                  dot={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* DETALHAMENTO POR CLASSE / CATEGORIA */}
-      <div className="panel p-5">
-        <div className="flex items-center justify-between border-b border-border pb-3">
-          <div>
-            <h3 className="text-base font-bold text-foreground">
-              Rendimento por Classe de Ativo ({monthLabel(selectedMonth)})
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Distribuição do resultado financeiro e proventos por tipo de aplicação.
-            </p>
-          </div>
-          <PieChart className="h-4 w-4 text-muted-foreground" />
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {categoryYieldBreakdown.map((cat) => (
-            <div
-              key={cat.category}
-              className="rounded-xl border border-border bg-surface p-4 space-y-2 flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-foreground">{cat.label}</span>
-                  <span className="text-[10px] font-semibold text-muted-foreground">
-                    {cat.weightPercent.toFixed(1)}% da carteira
-                  </span>
+      {/* ========================================================== */}
+      {/* SEÇÃO 1: VISÃO MENSAL                                      */}
+      {/* ========================================================== */}
+      {periodMode === "mensal" && (
+        <>
+          {/* CARDS PRINCIPAIS DO MÊS */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* CARD 1: Rendimento no Mês (R$) */}
+            <div className="panel p-5 relative overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Rendimento no Mês (R$)
+                  </p>
+                  <p
+                    className={`num text-2xl sm:text-3xl font-bold mt-1.5 ${
+                      isMonthProfitPositive ? "text-success" : "text-destructive"
+                    }`}
+                  >
+                    {isMonthProfitPositive
+                      ? `+ ${formatCurrency(monthReportData.profitAmount)}`
+                      : formatCurrency(monthReportData.profitAmount)}
+                  </p>
                 </div>
-                <p className="num text-lg font-bold text-primary mt-1">
-                  {formatCurrency(cat.currentBalance)}
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                    isMonthProfitPositive ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"
+                  }`}
+                >
+                  {isMonthProfitPositive ? <ArrowUpRight className="h-6 w-6" /> : <ArrowDownRight className="h-6 w-6" />}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Proventos no Mês:</span>
+                <span className="font-bold text-foreground">
+                  {formatCurrency(monthReportData.totalDividends)}
+                </span>
+              </div>
+            </div>
+
+            {/* CARD 2: Rentabilidade no Mês (%) */}
+            <div className="panel p-5 relative overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Rentabilidade no Mês (%)
+                  </p>
+                  <p
+                    className={`num text-2xl sm:text-3xl font-bold mt-1.5 ${
+                      isMonthProfitPositive ? "text-success" : "text-destructive"
+                    }`}
+                  >
+                    {formatPercent(monthReportData.profitPercent)}
+                  </p>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                  <Percent className="h-6 w-6" />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Desempenho vs CDI:</span>
+                <span
+                  className={`font-bold ${
+                    monthReportData.percentOfCdi >= 100 ? "text-success" : "text-warning"
+                  }`}
+                >
+                  {monthReportData.percentOfCdi.toFixed(1)}% do CDI
+                </span>
+              </div>
+            </div>
+
+            {/* CARD 3: Patrimônio Final */}
+            <div className="panel p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Patrimônio Final ({monthLabel(selectedMonth)})
+                  </p>
+                  <p className="num text-2xl sm:text-3xl font-bold text-foreground mt-1.5">
+                    {formatCurrency(monthReportData.finalBalance)}
+                  </p>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-strong text-muted-foreground">
+                  <Wallet className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Saldo Inicial do Mês:</span>
+                <span className="num font-semibold text-muted-foreground">
+                  {formatCurrency(monthReportData.initialBalance)}
+                </span>
+              </div>
+            </div>
+
+            {/* CARD 4: Aportes Líquidos */}
+            <div className="panel p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Aportes Líquidos no Mês
+                  </p>
+                  <p className="num text-2xl sm:text-3xl font-bold text-primary mt-1.5">
+                    {formatCurrency(monthReportData.deposits - monthReportData.withdrawals)}
+                  </p>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-strong text-muted-foreground">
+                  <Calendar className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground">Aportes: </span>
+                  <span className="num font-bold text-success">+{formatCurrency(monthReportData.deposits)}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-muted-foreground">Resgates: </span>
+                  <span className="num font-bold text-destructive">-{formatCurrency(monthReportData.withdrawals)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* BENCHMARKS DO MÊS */}
+          <div className="panel p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3 gap-2">
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  Comparativo de Desempenho do Mês vs Benchmarks
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Como sua carteira performou em relação aos principais indicadores da economia brasileira.
+                </p>
+              </div>
+              <Badge variant="outline" className="w-fit text-xs font-semibold">
+                {monthLabel(selectedMonth)}
+              </Badge>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border-2 border-primary bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-primary uppercase">Sua Carteira</span>
+                  <Sparkles className="h-4 w-4 text-primary" />
+                </div>
+                <p className={`num text-2xl font-bold ${isMonthProfitPositive ? "text-success" : "text-destructive"}`}>
+                  {formatPercent(monthReportData.profitPercent)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Rendimento em R$: <span className="font-bold text-foreground">{formatCurrency(monthReportData.profitAmount)}</span>
                 </p>
               </div>
 
-              <div className="border-t border-border pt-2 space-y-1 text-xs">
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Rendimento R$:</span>
-                  <span
-                    className={`num font-bold ${
-                      cat.estimatedProfitAmount >= 0 ? "text-success" : "text-destructive"
-                    }`}
-                  >
-                    {formatCurrency(cat.estimatedProfitAmount)}
-                  </span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase">CDI</span>
+                  <Landmark className="h-4 w-4 text-muted-foreground" />
                 </div>
+                <p className="num text-2xl font-bold text-foreground">
+                  {formatPercent(monthReportData.cdiBenchmark)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Sua carteira: <span className="font-bold text-primary">{monthReportData.percentOfCdi.toFixed(1)}% do CDI</span>
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Rentabilidade %:</span>
-                  <span
-                    className={`num font-bold ${
-                      cat.profitPercent >= 0 ? "text-success" : "text-destructive"
-                    }`}
-                  >
-                    {formatPercent(cat.profitPercent)}
-                  </span>
+                  <span className="text-xs font-bold text-muted-foreground uppercase">IPCA (Inflação)</span>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </div>
-                {cat.dividendsAmount > 0 && (
-                  <div className="flex items-center justify-between text-success">
-                    <span className="text-[11px]">Proventos:</span>
-                    <span className="num font-bold">+{formatCurrency(cat.dividendsAmount)}</span>
-                  </div>
-                )}
+                <p className="num text-2xl font-bold text-foreground">
+                  {formatPercent(monthReportData.ipcaBenchmark)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Ganho Real:{" "}
+                  <span className={`font-bold ${monthReportData.realReturn >= 0 ? "text-success" : "text-destructive"}`}>
+                    {formatPercent(monthReportData.realReturn)}
+                  </span>
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground uppercase">Ibovespa (B3)</span>
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <p className="num text-2xl font-bold text-foreground">
+                  {formatPercent(monthReportData.ibovespaBenchmark)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Spread vs Bolsa:{" "}
+                  <span className="font-bold text-foreground">
+                    {formatPercent(monthReportData.profitPercent - monthReportData.ibovespaBenchmark)}
+                  </span>
+                </p>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* TABELA DETALHADA POR ATIVO NO MÊS */}
-      <div className="panel overflow-hidden print:border-none print:shadow-none">
-        <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <h3 className="text-base font-bold text-foreground">
-              Detalhamento de Rendimento por Ativo ({monthLabel(selectedMonth)})
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              Posição, proventos, movimentações e rendimento individual de cada ativo.
-            </p>
           </div>
-          <span className="text-xs text-muted-foreground">
-            {assetYieldList.length} ativos ativos analisados
-          </span>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="border-b border-border bg-surface text-muted-foreground">
-              <tr>
-                <th className="py-3 pl-4 pr-3 font-semibold">Ativo / Código</th>
-                <th className="px-3 py-3 font-semibold">Classe & Instituição</th>
-                <th className="px-3 py-3 text-right font-semibold">Saldo Atual</th>
-                <th className="px-3 py-3 text-right font-semibold">Aportes / Resgates</th>
-                <th className="px-3 py-3 text-right font-semibold">Proventos no Mês</th>
-                <th className="px-3 py-3 text-right font-semibold">Rendimento (R$)</th>
-                <th className="py-3 pl-3 pr-4 text-right font-semibold">Rentabilidade (%)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {assetYieldList.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
-                    Nenhum investimento ativo no momento.
-                  </td>
-                </tr>
-              ) : (
-                assetYieldList.map((item) => {
-                  const inv = item.investment;
-                  const isPositive = item.profitAmount >= 0;
+          {/* GRÁFICOS MENSAL */}
+          <div className="grid gap-6 lg:grid-cols-2 print:break-inside-avoid">
+            <div className="panel p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold">Rendimento em Reais (R$) por Mês</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Histórico do resultado financeiro monetário gerado
+                  </p>
+                </div>
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              </div>
 
-                  return (
-                    <tr key={inv.id} className="transition-colors hover:bg-surface/50">
-                      <td className="py-3 pl-4 pr-3">
-                        <p className="font-bold text-foreground">{inv.name}</p>
-                        {inv.ticker && (
-                          <span className="text-[10px] font-mono text-primary font-semibold">
-                            {inv.ticker}
-                          </span>
-                        )}
-                      </td>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={historicalChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+                    <XAxis
+                      dataKey="mes"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+                      tickFormatter={(v) => `R$ ${(v / 1000).toFixed(0)}k`}
+                    />
+                    <RechartsTooltip
+                      formatter={(val: number) => [formatCurrency(val), "Rendimento"]}
+                      contentStyle={{
+                        backgroundColor: "var(--color-card)",
+                        borderColor: "var(--color-border)",
+                        borderRadius: "0.75rem",
+                      }}
+                    />
+                    <Bar dataKey="lucroRs" radius={[4, 4, 0, 0]}>
+                      {historicalChartData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={entry.lucroRs >= 0 ? "var(--color-success)" : "var(--color-destructive)"}
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
 
-                      <td className="px-3 py-3">
-                        <p className="font-medium text-foreground">{inv.institution}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {CATEGORY_LABELS[inv.category] ?? inv.category} ·{" "}
-                          {SUBTYPE_LABELS[inv.sub_type] ?? inv.sub_type}
-                        </p>
-                      </td>
+            <div className="panel p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold">Rentabilidade (%) vs CDI</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Comparação percentual da carteira vs taxa livre de risco
+                  </p>
+                </div>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </div>
 
-                      <td className="num px-3 py-3 text-right font-bold text-foreground">
-                        {formatCurrency(item.currentBalance)}
-                        <span className="block text-[10px] font-normal text-muted-foreground">
-                          {item.sharePercent.toFixed(1)}% do total
-                        </span>
-                      </td>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={historicalChartData} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--color-border)" />
+                    <XAxis
+                      dataKey="mes"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+                    />
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+                      tickFormatter={(v) => `${v.toFixed(1)}%`}
+                    />
+                    <RechartsTooltip
+                      formatter={(val: number, name: string) => [
+                        `${val.toFixed(2)}%`,
+                        name === "rentabilidadePct" ? "Sua Carteira" : "CDI",
+                      ]}
+                      contentStyle={{
+                        backgroundColor: "var(--color-card)",
+                        borderColor: "var(--color-border)",
+                        borderRadius: "0.75rem",
+                      }}
+                    />
+                    <Legend
+                      formatter={(value) => (value === "rentabilidadePct" ? "Sua Carteira (%)" : "CDI (%)")}
+                      wrapperStyle={{ fontSize: "12px", paddingTop: "10px" }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="rentabilidadePct"
+                      stroke="var(--color-primary)"
+                      strokeWidth={2.5}
+                      dot={{ r: 4, fill: "var(--color-primary)" }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="cdiPct"
+                      stroke="var(--color-muted-foreground)"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
 
-                      <td className="num px-3 py-3 text-right">
-                        {item.deposits > 0 && (
-                          <span className="block text-success font-semibold">
-                            +{formatCurrency(item.deposits)}
-                          </span>
-                        )}
-                        {item.withdrawals > 0 && (
-                          <span className="block text-destructive font-semibold">
-                            -{formatCurrency(item.withdrawals)}
-                          </span>
-                        )}
-                        {item.deposits === 0 && item.withdrawals === 0 && (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
+          {/* DETALHAMENTO POR CLASSE */}
+          <div className="panel p-5">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  Rendimento por Classe de Ativo ({monthLabel(selectedMonth)})
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Distribuição do resultado financeiro e proventos por tipo de aplicação.
+                </p>
+              </div>
+              <PieChart className="h-4 w-4 text-muted-foreground" />
+            </div>
 
-                      <td className="num px-3 py-3 text-right font-semibold">
-                        {item.dividends > 0 ? (
-                          <span className="text-success font-bold">
-                            +{formatCurrency(item.dividends)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {categoryYieldBreakdown.map((cat) => (
+                <div
+                  key={cat.category}
+                  className="rounded-xl border border-border bg-surface p-4 space-y-2 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-foreground">{cat.label}</span>
+                      <span className="text-[10px] font-semibold text-muted-foreground">
+                        {cat.weightPercent.toFixed(1)}% da carteira
+                      </span>
+                    </div>
+                    <p className="num text-lg font-bold text-primary mt-1">
+                      {formatCurrency(cat.currentBalance)}
+                    </p>
+                  </div>
 
-                      <td className="num px-3 py-3 text-right font-bold">
-                        <span className={isPositive ? "text-success" : "text-destructive"}>
-                          {isPositive ? `+${formatCurrency(item.profitAmount)}` : formatCurrency(item.profitAmount)}
-                        </span>
-                      </td>
+                  <div className="border-t border-border pt-2 space-y-1 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Rendimento R$:</span>
+                      <span
+                        className={`num font-bold ${
+                          cat.estimatedProfitAmount >= 0 ? "text-success" : "text-destructive"
+                        }`}
+                      >
+                        {formatCurrency(cat.estimatedProfitAmount)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Rentabilidade %:</span>
+                      <span
+                        className={`num font-bold ${
+                          cat.profitPercent >= 0 ? "text-success" : "text-destructive"
+                        }`}
+                      >
+                        {formatPercent(cat.profitPercent)}
+                      </span>
+                    </div>
+                    {cat.dividendsAmount > 0 && (
+                      <div className="flex items-center justify-between text-success">
+                        <span className="text-[11px]">Proventos:</span>
+                        <span className="num font-bold">+{formatCurrency(cat.dividendsAmount)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
 
-                      <td className="num py-3 pl-3 pr-4 text-right font-bold">
-                        <span className={isPositive ? "text-success" : "text-destructive"}>
-                          {formatPercent(item.profitPercent)}
-                        </span>
+          {/* TABELA DE ATIVOS NO MÊS */}
+          <div className="panel overflow-hidden print:border-none print:shadow-none">
+            <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  Detalhamento de Rendimento por Ativo ({monthLabel(selectedMonth)})
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Posição, proventos, movimentações e rendimento individual de cada ativo.
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {assetYieldList.length} ativos ativos analisados
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-border bg-surface text-muted-foreground">
+                  <tr>
+                    <th className="py-3 pl-4 pr-3 font-semibold">Ativo / Código</th>
+                    <th className="px-3 py-3 font-semibold">Classe & Instituição</th>
+                    <th className="px-3 py-3 text-right font-semibold">Saldo Atual</th>
+                    <th className="px-3 py-3 text-right font-semibold">Aportes / Resgates</th>
+                    <th className="px-3 py-3 text-right font-semibold">Proventos no Mês</th>
+                    <th className="px-3 py-3 text-right font-semibold">Rendimento (R$)</th>
+                    <th className="py-3 pl-3 pr-4 text-right font-semibold">Rentabilidade (%)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {assetYieldList.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                        Nenhum investimento ativo no momento.
                       </td>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+                  ) : (
+                    assetYieldList.map((item) => {
+                      const inv = item.investment;
+                      const isPositive = item.profitAmount >= 0;
+
+                      return (
+                        <tr key={inv.id} className="transition-colors hover:bg-surface/50">
+                          <td className="py-3 pl-4 pr-3">
+                            <p className="font-bold text-foreground">{inv.name}</p>
+                            {inv.ticker && (
+                              <span className="text-[10px] font-mono text-primary font-semibold">
+                                {inv.ticker}
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-3">
+                            <p className="font-medium text-foreground">{inv.institution}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {CATEGORY_LABELS[inv.category] ?? inv.category} ·{" "}
+                              {SUBTYPE_LABELS[inv.sub_type] ?? inv.sub_type}
+                            </p>
+                          </td>
+
+                          <td className="num px-3 py-3 text-right font-bold text-foreground">
+                            {formatCurrency(item.currentBalance)}
+                            <span className="block text-[10px] font-normal text-muted-foreground">
+                              {item.sharePercent.toFixed(1)}% do total
+                            </span>
+                          </td>
+
+                          <td className="num px-3 py-3 text-right">
+                            {item.deposits > 0 && (
+                              <span className="block text-success font-semibold">
+                                +{formatCurrency(item.deposits)}
+                              </span>
+                            )}
+                            {item.withdrawals > 0 && (
+                              <span className="block text-destructive font-semibold">
+                                -{formatCurrency(item.withdrawals)}
+                              </span>
+                            )}
+                            {item.deposits === 0 && item.withdrawals === 0 && (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+
+                          <td className="num px-3 py-3 text-right font-semibold">
+                            {item.dividends > 0 ? (
+                              <span className="text-success font-bold">
+                                +{formatCurrency(item.dividends)}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+
+                          <td className="num px-3 py-3 text-right font-bold">
+                            <span className={isPositive ? "text-success" : "text-destructive"}>
+                              {isPositive ? `+${formatCurrency(item.profitAmount)}` : formatCurrency(item.profitAmount)}
+                            </span>
+                          </td>
+
+                          <td className="num py-3 pl-3 pr-4 text-right font-bold">
+                            <span className={isPositive ? "text-success" : "text-destructive"}>
+                              {formatPercent(item.profitPercent)}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ========================================================== */}
+      {/* SEÇÃO 2: VISÃO ANUAL                                       */}
+      {/* ========================================================== */}
+      {periodMode === "anual" && (
+        <>
+          {/* CARDS PRINCIPAIS DO ANO */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {/* CARD 1: Rendimento Total no Ano (R$) */}
+            <div className="panel p-5 relative overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Rendimento no Ano {selectedYear} (R$)
+                  </p>
+                  <p
+                    className={`num text-2xl sm:text-3xl font-bold mt-1.5 ${
+                      isYearProfitPositive ? "text-success" : "text-destructive"
+                    }`}
+                  >
+                    {isYearProfitPositive
+                      ? `+ ${formatCurrency(annualReportData.totalProfitAmount)}`
+                      : formatCurrency(annualReportData.totalProfitAmount)}
+                  </p>
+                </div>
+                <div
+                  className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                    isYearProfitPositive ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"
+                  }`}
+                >
+                  {isYearProfitPositive ? <ArrowUpRight className="h-6 w-6" /> : <ArrowDownRight className="h-6 w-6" />}
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Proventos em {selectedYear}:</span>
+                <span className="font-bold text-foreground">
+                  {formatCurrency(annualReportData.totalDividends)}
+                </span>
+              </div>
+            </div>
+
+            {/* CARD 2: Rentabilidade Acumulada no Ano (%) */}
+            <div className="panel p-5 relative overflow-hidden border-primary/20 bg-gradient-to-br from-card via-card to-primary/5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Rentabilidade no Ano (%)
+                  </p>
+                  <p
+                    className={`num text-2xl sm:text-3xl font-bold mt-1.5 ${
+                      isYearProfitPositive ? "text-success" : "text-destructive"
+                    }`}
+                  >
+                    {formatPercent(annualReportData.yearProfitPercent)}
+                  </p>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
+                  <Percent className="h-6 w-6" />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Desempenho vs CDI:</span>
+                <span
+                  className={`font-bold ${
+                    annualReportData.yearPercentOfCdi >= 100 ? "text-success" : "text-warning"
+                  }`}
+                >
+                  {annualReportData.yearPercentOfCdi.toFixed(1)}% do CDI
+                </span>
+              </div>
+            </div>
+
+            {/* CARD 3: Patrimônio Atual */}
+            <div className="panel p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Patrimônio Fechamento {selectedYear}
+                  </p>
+                  <p className="num text-2xl sm:text-3xl font-bold text-foreground mt-1.5">
+                    {formatCurrency(annualReportData.finalYearBalance)}
+                  </p>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-strong text-muted-foreground">
+                  <Wallet className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Saldo Início de {selectedYear}:</span>
+                <span className="num font-semibold text-muted-foreground">
+                  {formatCurrency(annualReportData.initialYearBalance)}
+                </span>
+              </div>
+            </div>
+
+            {/* CARD 4: Aportes Líquidos no Ano */}
+            <div className="panel p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Aportes Líquidos em {selectedYear}
+                  </p>
+                  <p className="num text-2xl sm:text-3xl font-bold text-primary mt-1.5">
+                    {formatCurrency(annualReportData.totalDeposits - annualReportData.totalWithdrawals)}
+                  </p>
+                </div>
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-strong text-muted-foreground">
+                  <Calendar className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="mt-4 pt-3 border-t border-border grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground">Aportes: </span>
+                  <span className="num font-bold text-success">+{formatCurrency(annualReportData.totalDeposits)}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-muted-foreground">Resgates: </span>
+                  <span className="num font-bold text-destructive">-{formatCurrency(annualReportData.totalWithdrawals)}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* BENCHMARKS DO ANO */}
+          <div className="panel p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-border pb-3 gap-2">
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  Comparativo de Desempenho Anual ({selectedYear}) vs Benchmarks
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Rentabilidade anual acumulada da carteira comparada aos indicadores macroeconômicos.
+                </p>
+              </div>
+              <Badge variant="outline" className="w-fit text-xs font-semibold">
+                Ano {selectedYear}
+              </Badge>
+            </div>
+
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-xl border-2 border-primary bg-primary/5 p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-primary uppercase">Sua Carteira ({selectedYear})</span>
+                  <Sparkles className="h-4 w-4 text-primary" />
+                </div>
+                <p className={`num text-2xl font-bold ${isYearProfitPositive ? "text-success" : "text-destructive"}`}>
+                  {formatPercent(annualReportData.yearProfitPercent)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Ganho Total: <span className="font-bold text-foreground">{formatCurrency(annualReportData.totalProfitAmount)}</span>
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground uppercase">CDI Acumulado</span>
+                  <Landmark className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <p className="num text-2xl font-bold text-foreground">
+                  {formatPercent(annualReportData.yearCdiPercent)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Sua carteira: <span className="font-bold text-primary">{annualReportData.yearPercentOfCdi.toFixed(1)}% do CDI</span>
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground uppercase">IPCA (Inflação)</span>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <p className="num text-2xl font-bold text-foreground">
+                  {formatPercent(annualReportData.yearIpcaPercent)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Ganho Real no Ano:{" "}
+                  <span className={`font-bold ${annualReportData.yearRealReturn >= 0 ? "text-success" : "text-destructive"}`}>
+                    {formatPercent(annualReportData.yearRealReturn)}
+                  </span>
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-border bg-surface p-4 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground uppercase">Ibovespa</span>
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <p className="num text-2xl font-bold text-foreground">
+                  {formatPercent(annualReportData.yearIbovPercent)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  Spread vs Bolsa:{" "}
+                  <span className="font-bold text-foreground">
+                    {formatPercent(annualReportData.yearProfitPercent - annualReportData.yearIbovPercent)}
+                  </span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* TABELA DE TODOS OS 12 MESES DO ANO */}
+          <div className="panel overflow-hidden print:border-none print:shadow-none">
+            <div className="p-4 border-b border-border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <h3 className="text-base font-bold text-foreground">
+                  Demonstrativo Mês a Mês ({selectedYear})
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Evolução mensal de rendimento (R$), rentabilidade (%), aportes, resgates e proventos em {selectedYear}.
+                </p>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                12 meses do exercício de {selectedYear}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-border bg-surface text-muted-foreground">
+                  <tr>
+                    <th className="py-3 pl-4 pr-3 font-semibold">Mês</th>
+                    <th className="px-3 py-3 text-right font-semibold">Aportes</th>
+                    <th className="px-3 py-3 text-right font-semibold">Resgates</th>
+                    <th className="px-3 py-3 text-right font-semibold">Proventos Recebidos</th>
+                    <th className="px-3 py-3 text-right font-semibold">Saldo Final</th>
+                    <th className="px-3 py-3 text-right font-semibold">Rendimento (R$)</th>
+                    <th className="px-3 py-3 text-right font-semibold">Rentabilidade (%)</th>
+                    <th className="py-3 pl-3 pr-4 text-right font-semibold">CDI (%)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {annualReportData.monthlyBreakdown.map((m) => {
+                    const isPositive = m.profitAmount >= 0;
+
+                    return (
+                      <tr key={m.ym} className="transition-colors hover:bg-surface/50">
+                        <td className="py-3 pl-4 pr-3 font-bold text-foreground">
+                          {m.mes} {m.ym === currentYM ? "(Mês Atual)" : ""}
+                        </td>
+
+                        <td className="num px-3 py-3 text-right text-success">
+                          {m.deposits > 0 ? `+${formatCurrency(m.deposits)}` : "—"}
+                        </td>
+
+                        <td className="num px-3 py-3 text-right text-destructive">
+                          {m.withdrawals > 0 ? `-${formatCurrency(m.withdrawals)}` : "—"}
+                        </td>
+
+                        <td className="num px-3 py-3 text-right text-foreground font-medium">
+                          {m.dividends > 0 ? `+${formatCurrency(m.dividends)}` : "—"}
+                        </td>
+
+                        <td className="num px-3 py-3 text-right font-bold text-primary">
+                          {m.finalBalance > 0 ? formatCurrency(m.finalBalance) : "—"}
+                        </td>
+
+                        <td className="num px-3 py-3 text-right font-bold">
+                          {m.hasData ? (
+                            <span className={isPositive ? "text-success" : "text-destructive"}>
+                              {isPositive ? `+${formatCurrency(m.profitAmount)}` : formatCurrency(m.profitAmount)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+
+                        <td className="num px-3 py-3 text-right font-bold">
+                          {m.hasData ? (
+                            <span className={isPositive ? "text-success" : "text-destructive"}>
+                              {formatPercent(m.profitPercent)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+
+                        <td className="num py-3 pl-3 pr-4 text-right text-muted-foreground">
+                          {m.hasData ? formatPercent(m.cdi) : "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Modal para Fechamento Rápido */}
       <MonthlySnapshotDialog
