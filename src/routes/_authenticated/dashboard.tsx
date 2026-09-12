@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowRight,
   ArrowUpRight,
+  BarChart3,
   Calendar,
   Clock,
   DollarSign,
@@ -149,6 +150,11 @@ function DashboardPage() {
               </span>
             )}
           </Button>
+          <Button asChild variant="outline" size="sm" className="border-primary/30 hover:bg-primary/5 hover:text-primary">
+            <Link to="/relatorios">
+              <BarChart3 className="mr-1.5 h-4 w-4 text-primary" /> Relatório do Mês
+            </Link>
+          </Button>
           <Button onClick={() => setOpenInvDialog(true)} size="sm">
             <Plus className="mr-1.5 h-4 w-4" /> Novo Ativo
           </Button>
@@ -203,9 +209,13 @@ function DashboardPage() {
           icon={DollarSign}
         />
         <StatCard
-          label="Provisão de IR"
+          label="Provisão de Tributos (IR & IOF)"
           value={formatCurrency(summary.totalTax)}
-          hint="Tabela regressiva e alíquotas aplicadas"
+          hint={
+            summary.totalIof > 0
+              ? `IR: ${formatCurrency(summary.totalIr)} · IOF: ${formatCurrency(summary.totalIof)}`
+              : "Tabela regressiva aplicada (IOF zerado)"
+          }
           icon={ShieldAlert}
         />
       </div>
@@ -446,7 +456,10 @@ function DashboardPage() {
                         <span className="text-xs text-muted-foreground">· {inv.institution}</span>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {CATEGORY_LABELS[inv.category]} · {inv.tax_exempt ? "Isento IR" : `IR est. ${formatCurrency(m.estimatedTax)}`}
+                        {CATEGORY_LABELS[inv.category]} ·{" "}
+                        {inv.tax_exempt
+                          ? "Isento de IR/IOF"
+                          : `Tributos: ${formatCurrency(m.totalTax)}`}
                       </p>
                     </div>
                   </div>

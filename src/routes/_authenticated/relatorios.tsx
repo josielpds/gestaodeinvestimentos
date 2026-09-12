@@ -3,13 +3,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import {
   AlertTriangle,
   Award,
+  BarChart3,
   Calendar,
   CheckCircle2,
   Clock,
   DollarSign,
   Edit2,
+  FileText,
   Landmark,
   MoreVertical,
+  Percent,
+  PieChart,
   Plus,
   ShieldCheck,
   Target as TargetIcon,
@@ -19,7 +23,7 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { StatCard } from "@/components/stat-card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,13 +41,22 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { GoalDialog } from "@/components/goal-dialog";
-import { useDeleteRow, useGoals, useInvestments, useTransactions } from "@/lib/data";
+import { MonthlyYieldReport } from "@/components/monthly-yield-report";
+import {
+  useDeleteRow,
+  useDividends,
+  useGoals,
+  useInvestments,
+  useSnapshots,
+  useTransactions,
+} from "@/lib/data";
 import {
   CATEGORY_LABELS,
   INDEXER_LABELS,
   daysBetween,
   formatCurrency,
   formatDate,
+  formatPercent,
   metricsFor,
   summarize,
   todayISO,
@@ -52,7 +65,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/relatorios")({
   head: () => ({
-    meta: [{ title: "Relatórios & Metas — Finantria Invest" }],
+    meta: [{ title: "Relatórios de Investimentos & Metas — Finantria Invest" }],
   }),
   component: RelatoriosPage,
 });
@@ -61,8 +74,11 @@ function RelatoriosPage() {
   const { data: goals = [], isLoading: loadingGoals } = useGoals();
   const { data: investments = [] } = useInvestments();
   const { data: transactions = [] } = useTransactions();
+  const { data: dividends = [] } = useDividends();
+  const { data: snapshots = [] } = useSnapshots();
   const deleteGoal = useDeleteRow("financial_goals");
 
+  const [activeTab, setActiveTab] = useState<string>("rendimento_mensal");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -171,240 +187,285 @@ function RelatoriosPage() {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6">
+      {/* Header Principal */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between print:hidden">
         <div>
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Relatórios & Metas Financeiras
+            Central de Relatórios
           </h1>
           <p className="text-sm text-muted-foreground">
-            Acompanhe o progresso das suas metas, cronograma de vencimentos e controle de risco / FGC.
+            Acompanhe o rendimento do mês nos investimentos em R$ e %, metas financeiras, cronograma de vencimentos e controle de risco / FGC.
           </p>
         </div>
-        <Button onClick={handleOpenNewGoal} size="sm">
-          <Plus className="mr-1.5 h-4 w-4" /> Nova Meta
-        </Button>
-      </div>
 
-      {/* SEÇÃO 1: Metas Financeiras */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <TargetIcon className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-bold">Metas Financeiras</h2>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            Patrimônio Base: {formatCurrency(totalNet)}
-          </span>
-        </div>
-
-        {goals.length === 0 ? (
-          <div className="panel p-8 text-center text-sm text-muted-foreground">
-            <p>Você ainda não definiu metas financeiras.</p>
-            <Button onClick={handleOpenNewGoal} size="sm" className="mt-3">
-              <Plus className="mr-1.5 h-4 w-4" /> Criar Primeira Meta
-            </Button>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {goals.map((goal) => {
-              const progressPct =
-                goal.target_amount > 0
-                  ? Math.min(100, (totalNet / goal.target_amount) * 100)
-                  : 0;
-              const remaining = Math.max(0, goal.target_amount - totalNet);
-              const daysLeft = daysBetween(todayStr, goal.target_date);
-              const isCompleted = totalNet >= goal.target_amount;
-
-              return (
-                <div key={goal.id} className="panel p-5 space-y-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <span className="rounded bg-accent px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
-                        {goal.category || "Geral"}
-                      </span>
-                      <h3 className="mt-1.5 text-base font-bold text-foreground">{goal.title}</h3>
-                    </div>
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          <MoreVertical className="h-3.5 w-3.5" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="text-xs">
-                        <DropdownMenuItem onClick={() => handleOpenEditGoal(goal)}>
-                          <Edit2 className="mr-2 h-3.5 w-3.5" /> Editar Meta
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => setDeleteConfirmId(goal.id)}
-                          className="text-destructive focus:text-destructive"
-                        >
-                          <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-
-                  {/* Barra de Progresso */}
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-primary">{progressPct.toFixed(1)}%</span>
-                      <span className="text-muted-foreground">
-                        Alvo: {formatCurrency(goal.target_amount)}
-                      </span>
-                    </div>
-                    <Progress value={progressPct} className="h-2" />
-                  </div>
-
-                  {/* Detalhes */}
-                  <div className="grid grid-cols-2 gap-2 text-xs border-t border-border pt-3">
-                    <div>
-                      <p className="text-muted-foreground">Falta Acumular</p>
-                      <p className="num font-bold text-foreground">
-                        {isCompleted ? "Concluída!" : formatCurrency(remaining)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Prazo Alvo</p>
-                      <p className="font-medium text-foreground">
-                        {formatDate(goal.target_date)} ({daysLeft}d)
-                      </p>
-                    </div>
-                  </div>
-
-                  {goal.notes && (
-                    <p className="text-[11px] text-muted-foreground line-clamp-2">{goal.notes}</p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+        {activeTab === "metas" && (
+          <Button onClick={handleOpenNewGoal} size="sm">
+            <Plus className="mr-1.5 h-4 w-4" /> Nova Meta
+          </Button>
         )}
       </div>
 
-      {/* SEÇÃO 2: Cronograma de Vencimentos de Renda Fixa */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <Calendar className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-bold">Cronograma de Vencimentos (Renda Fixa)</h2>
-        </div>
+      {/* Tabs de Navegação entre Relatórios */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 p-1 bg-surface border border-border h-auto gap-1 rounded-xl print:hidden">
+          <TabsTrigger
+            value="rendimento_mensal"
+            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+          >
+            <TrendingUp className="h-4 w-4" /> Rendimento do Mês (R$ e %)
+          </TabsTrigger>
+          <TabsTrigger
+            value="metas"
+            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+          >
+            <TargetIcon className="h-4 w-4" /> Metas Financeiras
+          </TabsTrigger>
+          <TabsTrigger
+            value="vencimentos"
+            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+          >
+            <Calendar className="h-4 w-4" /> Vencimentos Renda Fixa
+          </TabsTrigger>
+          <TabsTrigger
+            value="risco_fgc"
+            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+          >
+            <ShieldCheck className="h-4 w-4" /> FGC & Indexadores
+          </TabsTrigger>
+        </TabsList>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {maturityReport.map((bucket) => (
-            <div key={bucket.label} className="panel p-4 space-y-2">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                {bucket.label}
-              </p>
-              <p className="num text-lg font-bold text-foreground">
-                {formatCurrency(bucket.total)}
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                {bucket.items.length} {bucket.items.length === 1 ? "ativo" : "ativos"}
-              </p>
+        {/* ABA 1: RELATÓRIO DE RENDIMENTO MENSAL (R$ E %) */}
+        <TabsContent value="rendimento_mensal" className="space-y-6 focus-visible:outline-none">
+          <MonthlyYieldReport
+            investments={investments}
+            transactions={transactions}
+            dividends={dividends}
+            snapshots={snapshots}
+          />
+        </TabsContent>
 
-              {bucket.items.length > 0 && (
-                <div className="space-y-1 pt-2 border-t border-border/50">
-                  {bucket.items.slice(0, 2).map((i) => (
-                    <div key={i.id} className="truncate text-[10px] text-muted-foreground">
-                      · {i.name} ({formatDate(i.due_date)})
-                    </div>
-                  ))}
-                  {bucket.items.length > 2 && (
-                    <span className="text-[10px] text-primary">
-                      +{bucket.items.length - 2} outros
-                    </span>
-                  )}
-                </div>
-              )}
+        {/* ABA 2: METAS FINANCEIRAS */}
+        <TabsContent value="metas" className="space-y-6 focus-visible:outline-none">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TargetIcon className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-bold">Metas Financeiras</h2>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* SEÇÃO 3: Controle de Risco, FGC e Indexadores */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* FGC e Instituições */}
-        <div className="panel p-5">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div>
-              <h2 className="text-base font-semibold">Exposição por Instituição & FGC</h2>
-              <p className="text-xs text-muted-foreground">
-                Limite de R$ 250.000,00 por conglomerado financeiro garantido
-              </p>
-            </div>
-            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+            <span className="text-xs text-muted-foreground">
+              Patrimônio Base: {formatCurrency(totalNet)}
+            </span>
           </div>
 
-          <div className="mt-4 space-y-3">
-            {fgcReport.map((item) => (
-              <div
-                key={item.institution}
-                className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-xs"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-foreground">{item.institution}</span>
-                    {item.isOverFGC && (
-                      <span className="inline-flex items-center gap-1 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
-                        <AlertTriangle className="h-3 w-3" /> Acima do FGC
+          {goals.length === 0 ? (
+            <div className="panel p-8 text-center text-sm text-muted-foreground">
+              <p>Você ainda não definiu metas financeiras.</p>
+              <Button onClick={handleOpenNewGoal} size="sm" className="mt-3">
+                <Plus className="mr-1.5 h-4 w-4" /> Criar Primeira Meta
+              </Button>
+            </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {goals.map((goal) => {
+                const progressPct =
+                  goal.target_amount > 0
+                    ? Math.min(100, (totalNet / goal.target_amount) * 100)
+                    : 0;
+                const remaining = Math.max(0, goal.target_amount - totalNet);
+                const daysLeft = daysBetween(todayStr, goal.target_date);
+                const isCompleted = totalNet >= goal.target_amount;
+
+                return (
+                  <div key={goal.id} className="panel p-5 space-y-4">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <span className="rounded bg-accent px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
+                          {goal.category || "Geral"}
+                        </span>
+                        <h3 className="mt-1.5 text-base font-bold text-foreground">{goal.title}</h3>
+                      </div>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <MoreVertical className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="text-xs">
+                          <DropdownMenuItem onClick={() => handleOpenEditGoal(goal)}>
+                            <Edit2 className="mr-2 h-3.5 w-3.5" /> Editar Meta
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => setDeleteConfirmId(goal.id)}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-3.5 w-3.5" /> Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+
+                    {/* Barra de Progresso */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-primary">{progressPct.toFixed(1)}%</span>
+                        <span className="text-muted-foreground">
+                          Alvo: {formatCurrency(goal.target_amount)}
+                        </span>
+                      </div>
+                      <Progress value={progressPct} className="h-2" />
+                    </div>
+
+                    {/* Detalhes */}
+                    <div className="grid grid-cols-2 gap-2 text-xs border-t border-border pt-3">
+                      <div>
+                        <p className="text-muted-foreground">Falta Acumular</p>
+                        <p className="num font-bold text-foreground">
+                          {isCompleted ? "Concluída!" : formatCurrency(remaining)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Prazo Alvo</p>
+                        <p className="font-medium text-foreground">
+                          {formatDate(goal.target_date)} ({daysLeft}d)
+                        </p>
+                      </div>
+                    </div>
+
+                    {goal.notes && (
+                      <p className="text-[11px] text-muted-foreground line-clamp-2">{goal.notes}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ABA 3: CRONOGRAMA DE VENCIMENTOS */}
+        <TabsContent value="vencimentos" className="space-y-6 focus-visible:outline-none">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-primary" />
+            <h2 className="text-lg font-bold">Cronograma de Vencimentos (Renda Fixa)</h2>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {maturityReport.map((bucket) => (
+              <div key={bucket.label} className="panel p-4 space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  {bucket.label}
+                </p>
+                <p className="num text-lg font-bold text-foreground">
+                  {formatCurrency(bucket.total)}
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  {bucket.items.length} {bucket.items.length === 1 ? "ativo" : "ativos"}
+                </p>
+
+                {bucket.items.length > 0 && (
+                  <div className="space-y-1 pt-2 border-t border-border/50">
+                    {bucket.items.slice(0, 2).map((i) => (
+                      <div key={i.id} className="truncate text-[10px] text-muted-foreground">
+                        · {i.name} ({formatDate(i.due_date)})
+                      </div>
+                    ))}
+                    {bucket.items.length > 2 && (
+                      <span className="text-[10px] text-primary">
+                        +{bucket.items.length - 2} outros
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground">
-                    {item.percentOfTotal.toFixed(1)}% do patrimônio total
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  <p className="num text-sm font-bold text-foreground">
-                    {formatCurrency(item.total)}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    Isento: {formatCurrency(item.exemptTaxTotal)}
-                  </p>
-                </div>
+                )}
               </div>
             ))}
           </div>
-        </div>
+        </TabsContent>
 
-        {/* Indexadores */}
-        <div className="panel p-5">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div>
-              <h2 className="text-base font-semibold">Alocação por Indexador</h2>
-              <p className="text-xs text-muted-foreground">
-                Proteção inflacionária vs Pós-fixado vs Renda Variável
-              </p>
-            </div>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {indexerReport.map((item) => (
-              <div
-                key={item.indexer}
-                className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-xs"
-              >
+        {/* ABA 4: RISCO & FGC */}
+        <TabsContent value="risco_fgc" className="space-y-6 focus-visible:outline-none">
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* FGC e Instituições */}
+            <div className="panel p-5">
+              <div className="flex items-center justify-between border-b border-border pb-3">
                 <div>
-                  <span className="font-bold text-foreground">{item.label}</span>
-                  <p className="text-[11px] text-muted-foreground">
-                    {item.percent.toFixed(1)}% da carteira
+                  <h2 className="text-base font-semibold">Exposição por Instituição & FGC</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Limite de R$ 250.000,00 por conglomerado financeiro garantido
                   </p>
                 </div>
-
-                <div className="text-right">
-                  <p className="num text-sm font-bold text-foreground">
-                    {formatCurrency(item.value)}
-                  </p>
-                </div>
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
               </div>
-            ))}
+
+              <div className="mt-4 space-y-3">
+                {fgcReport.map((item) => (
+                  <div
+                    key={item.institution}
+                    className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground">{item.institution}</span>
+                        {item.isOverFGC && (
+                          <span className="inline-flex items-center gap-1 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
+                            <AlertTriangle className="h-3 w-3" /> Acima do FGC
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {item.percentOfTotal.toFixed(1)}% do patrimônio total
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="num text-sm font-bold text-foreground">
+                        {formatCurrency(item.total)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Isento: {formatCurrency(item.exemptTaxTotal)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Indexadores */}
+            <div className="panel p-5">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div>
+                  <h2 className="text-base font-semibold">Alocação por Indexador</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Proteção inflacionária vs Pós-fixado vs Renda Variável
+                  </p>
+                </div>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {indexerReport.map((item) => (
+                  <div
+                    key={item.indexer}
+                    className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-xs"
+                  >
+                    <div>
+                      <span className="font-bold text-foreground">{item.label}</span>
+                      <p className="text-[11px] text-muted-foreground">
+                        {item.percent.toFixed(1)}% da carteira
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="num text-sm font-bold text-foreground">
+                        {formatCurrency(item.value)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Modais */}
       <GoalDialog open={dialogOpen} onOpenChange={setDialogOpen} goal={selectedGoal} />

@@ -120,6 +120,45 @@ export function fixedIncomeTaxRate(days: number, isExempt = false): number {
   return 0.15;
 }
 
+/** Tabela regressiva de IOF (1 a 29 dias) para aplicações de renda fixa. */
+export const IOF_REGRESSION_RATES: Record<number, number> = {
+  1: 0.96,
+  2: 0.93,
+  3: 0.90,
+  4: 0.86,
+  5: 0.83,
+  6: 0.80,
+  7: 0.76,
+  8: 0.73,
+  9: 0.70,
+  10: 0.66,
+  11: 0.63,
+  12: 0.60,
+  13: 0.56,
+  14: 0.53,
+  15: 0.50,
+  16: 0.46,
+  17: 0.43,
+  18: 0.40,
+  19: 0.36,
+  20: 0.33,
+  21: 0.30,
+  22: 0.26,
+  23: 0.23,
+  24: 0.20,
+  25: 0.16,
+  26: 0.13,
+  27: 0.10,
+  28: 0.06,
+  29: 0.03,
+};
+
+/** Retorna a alíquota de IOF (0 a 0.96) com base no prazo decorrido em dias. */
+export function iofTaxRate(days: number, isExempt = false, isFixedIncome = true): number {
+  if (isExempt || !isFixedIncome || days >= 30 || days <= 0) return 0;
+  return IOF_REGRESSION_RATES[days] ?? 0;
+}
+
 export function daysBetween(start: string, end: string = todayISO()): number {
   const diff = new Date(end).getTime() - new Date(start).getTime();
   return Math.max(0, Math.ceil(diff / 86_400_000));
@@ -127,12 +166,16 @@ export function daysBetween(start: string, end: string = todayISO()): number {
 
 export interface InvestmentMetrics {
   daysHeld: number;
-  taxRatePercent: number;
+  taxRatePercent: number; // Alíquota de IR %
+  iofRatePercent: number; // Alíquota de IOF %
   investedTotal: number;
   grossProfit: number;
-  estimatedTax: number;
-  netBalance: number;
-  netProfit: number;
+  estimatedIof: number; // Valor de IOF estimado em R$
+  taxableProfitForIR: number; // Base de cálculo do IR (Lucro Bruto - IOF)
+  estimatedTax: number; // Valor de IR estimado em R$
+  totalTax: number; // Total de tributos (IOF + IR) em R$
+  netBalance: number; // Saldo Líquido
+  netProfit: number; // Lucro Líquido
   grossProfitPercent: number;
   netProfitPercent: number;
 }
@@ -145,18 +188,31 @@ export function metricsFor(inv: Investment, transactions: Transaction[] = []): I
 
   const daysHeld = daysBetween(inv.start_date);
   const isFixed = inv.category === "renda_fixa";
-  const rate = isFixed ? fixedIncomeTaxRate(daysHeld, inv.tax_exempt) : inv.tax_exempt ? 0 : 0.15;
+  const irRate = isFixed ? fixedIncomeTaxRate(daysHeld, inv.tax_exempt) : inv.tax_exempt ? 0 : 0.15;
+  const iofRate = iofTaxRate(daysHeld, inv.tax_exempt, isFixed);
 
   const grossProfit = inv.current_balance - investedTotal;
-  const estimatedTax = grossProfit > 0 ? grossProfit * rate : 0;
-  const netBalance = inv.current_balance - estimatedTax;
+  
+  // IOF incide primeiro sobre o lucro bruto
+  const estimatedIof = grossProfit > 0 ? grossProfit * iofRate : 0;
+  
+  // IR incide sobre o lucro após dedução do IOF
+  const taxableProfitForIR = Math.max(0, grossProfit - estimatedIof);
+  const estimatedTax = taxableProfitForIR > 0 ? taxableProfitForIR * irRate : 0;
+  
+  const totalTax = estimatedIof + estimatedTax;
+  const netBalance = inv.current_balance - totalTax;
 
   return {
     daysHeld,
-    taxRatePercent: rate * 100,
+    taxRatePercent: irRate * 100,
+    iofRatePercent: iofRate * 100,
     investedTotal,
     grossProfit,
+    estimatedIof,
+    taxableProfitForIR,
     estimatedTax,
+    totalTax,
     netBalance,
     netProfit: netBalance - investedTotal,
     grossProfitPercent: investedTotal > 0 ? (grossProfit / investedTotal) * 100 : 0,
@@ -167,6 +223,8 @@ export function metricsFor(inv: Investment, transactions: Transaction[] = []): I
 export interface PortfolioSummary {
   totalGross: number;
   totalInvested: number;
+  totalIof: number;
+  totalIr: number;
   totalTax: number;
   totalNet: number;
   grossProfit: number;
@@ -183,6 +241,8 @@ export function summarize(
   const active = investments.filter((i) => i.status === "ativo");
   let totalGross = 0;
   let totalInvested = 0;
+  let totalIof = 0;
+  let totalIr = 0;
   let totalTax = 0;
   const catMap: Record<string, number> = {};
   const instMap: Record<string, number> = {};
@@ -191,7 +251,9 @@ export function summarize(
     const m = metricsFor(inv, transactions);
     totalGross += inv.current_balance;
     totalInvested += m.investedTotal;
-    totalTax += m.estimatedTax;
+    totalIof += m.estimatedIof;
+    totalIr += m.estimatedTax;
+    totalTax += m.totalTax;
     catMap[inv.category] = (catMap[inv.category] ?? 0) + inv.current_balance;
     const inst = inv.institution || "Outras";
     instMap[inst] = (instMap[inst] ?? 0) + inv.current_balance;
@@ -201,6 +263,8 @@ export function summarize(
   return {
     totalGross,
     totalInvested,
+    totalIof,
+    totalIr,
     totalTax,
     totalNet,
     grossProfit: totalGross - totalInvested,

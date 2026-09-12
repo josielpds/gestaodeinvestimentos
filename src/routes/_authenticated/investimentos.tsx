@@ -98,6 +98,8 @@ function InvestimentosPage() {
   const stats = useMemo(() => {
     let applied = 0;
     let gross = 0;
+    let iof = 0;
+    let ir = 0;
     let tax = 0;
     let net = 0;
     let profit = 0;
@@ -106,14 +108,16 @@ function InvestimentosPage() {
       const m = metricsFor(inv, transactions);
       applied += m.investedTotal;
       gross += inv.current_balance;
-      tax += m.estimatedTax;
+      iof += m.estimatedIof;
+      ir += m.estimatedTax;
+      tax += m.totalTax;
       net += m.netBalance;
       profit += m.grossProfit;
     }
 
     const profitPercent = applied > 0 ? (profit / applied) * 100 : 0;
 
-    return { applied, gross, tax, net, profit, profitPercent };
+    return { applied, gross, iof, ir, tax, net, profit, profitPercent };
   }, [filteredInvestments, transactions]);
 
   async function handleDelete() {
@@ -198,9 +202,13 @@ function InvestimentosPage() {
           </p>
         </div>
         <div className="panel p-4">
-          <p className="text-xs text-muted-foreground">Saldo Líquido de IR</p>
+          <p className="text-xs text-muted-foreground">Saldo Líquido Estimado</p>
           <p className="num mt-1 text-xl font-bold text-foreground">
             {formatCurrency(stats.net)}
+          </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Tributos: {formatCurrency(stats.tax)}
+            {stats.iof > 0 && <span className="text-warning"> (IOF: {formatCurrency(stats.iof)})</span>}
           </p>
         </div>
       </div>
@@ -264,7 +272,7 @@ function InvestimentosPage() {
                 <th className="px-3 py-3 text-right font-semibold">Total Investido</th>
                 <th className="px-3 py-3 text-right font-semibold">Saldo Atual</th>
                 <th className="px-3 py-3 text-right font-semibold">Rentabilidade</th>
-                <th className="px-3 py-3 text-right font-semibold">IR Estimado</th>
+                <th className="px-3 py-3 text-right font-semibold">Tributos (IR / IOF)</th>
                 <th className="px-3 py-3 text-right font-semibold">Saldo Líquido</th>
                 <th className="py-3 pl-3 pr-4 text-center font-semibold">Ações</th>
               </tr>
@@ -327,7 +335,7 @@ function InvestimentosPage() {
                       {/* Datas */}
                       <td className="px-3 py-3">
                         <div className="text-muted-foreground">
-                          Início: {formatDate(inv.start_date)}
+                          Início: {formatDate(inv.start_date)} ({m.daysHeld}d)
                         </div>
                         <div className="text-[11px]">
                           {inv.due_date ? (
@@ -377,14 +385,27 @@ function InvestimentosPage() {
                         </div>
                       </td>
 
-                      {/* IR Estimado */}
+                      {/* Tributos Estimados (IR + IOF) */}
                       <td className="num px-3 py-3 text-right text-muted-foreground">
                         {inv.tax_exempt ? (
                           <span className="text-success font-medium">Isento</span>
                         ) : (
-                          <div>
-                            <span className="text-foreground">{formatCurrency(m.estimatedTax)}</span>
-                            <div className="text-[10px]">({m.taxRatePercent}%)</div>
+                          <div className="space-y-0.5">
+                            <span className="text-foreground font-semibold">
+                              {formatCurrency(m.totalTax)}
+                            </span>
+                            <div className="text-[10px] text-muted-foreground">
+                              IR: {formatCurrency(m.estimatedTax)} ({m.taxRatePercent}%)
+                            </div>
+                            {m.estimatedIof > 0 ? (
+                              <div className="text-[10px] text-warning font-semibold" title={`IOF regressivo (${m.daysHeld}º dia)`}>
+                                IOF: {formatCurrency(m.estimatedIof)} ({m.iofRatePercent.toFixed(0)}%)
+                              </div>
+                            ) : inv.category === "renda_fixa" && m.daysHeld < 30 ? (
+                              <div className="text-[10px] text-muted-foreground">
+                                IOF: 0% ({m.daysHeld}d)
+                              </div>
+                            ) : null}
                           </div>
                         )}
                       </td>
