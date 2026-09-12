@@ -395,17 +395,24 @@ function InvestimentosPage() {
                               {formatCurrency(m.totalTax)}
                             </span>
                             <div className="text-[10px] text-muted-foreground">
-                              IR: {formatCurrency(m.estimatedTax)} ({m.taxRatePercent}%)
+                              IR: {formatCurrency(m.estimatedTax)} ({m.taxRatePercent.toFixed(1)}%)
                             </div>
-                            {m.estimatedIof > 0 ? (
-                              <div className="text-[10px] text-warning font-semibold" title={`IOF regressivo (${m.daysHeld}º dia)`}>
-                                IOF: {formatCurrency(m.estimatedIof)} ({m.iofRatePercent.toFixed(0)}%)
-                              </div>
-                            ) : inv.category === "renda_fixa" && m.daysHeld < 30 ? (
-                              <div className="text-[10px] text-muted-foreground">
-                                IOF: 0% ({m.daysHeld}d)
-                              </div>
-                            ) : null}
+                            {inv.category === "renda_fixa" && (
+                              m.daysHeld >= 30 ? (
+                                <div className="text-[10px] text-muted-foreground">
+                                  IOF: Isento (≥30d)
+                                </div>
+                              ) : (
+                                <div
+                                  className={`text-[10px] font-semibold ${
+                                    m.estimatedIof > 0 ? "text-warning" : "text-muted-foreground"
+                                  }`}
+                                  title={`Tabela regressiva de IOF: Dia ${m.daysHeld} = ${m.iofRatePercent.toFixed(0)}%`}
+                                >
+                                  IOF: {formatCurrency(m.estimatedIof)} ({m.iofRatePercent.toFixed(0)}% · Dia {m.daysHeld})
+                                </div>
+                              )
+                            )}
                           </div>
                         )}
                       </td>
