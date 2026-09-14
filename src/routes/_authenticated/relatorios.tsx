@@ -148,6 +148,84 @@ function RelatoriosPage() {
   }, [investments, summary.totalGross]);
 
   // Relatório por Indexador
+  // Relatório de Renda Variável (Proventos & Tickers)
+  const rvReport = useMemo(() => {
+    const rvInvestments = investments.filter(
+      (i) => i.status === "ativo" && i.category === "renda_variavel",
+    );
+    const rvInvMap = new Map(rvInvestments.map((i) => [i.id, i]));
+
+    // Proventos agrupados por ativo
+    const assetDividends: Record<
+      string,
+      {
+        investmentId: string;
+        name: string;
+        ticker?: string | null;
+        subType: string;
+        currentBalance: number;
+        totalDividends: number;
+        dividendCount: number;
+      }
+    > = {};
+
+    for (const inv of rvInvestments) {
+      assetDividends[inv.id] = {
+        investmentId: inv.id,
+        name: inv.name,
+        ticker: inv.ticker,
+        subType: inv.sub_type,
+        currentBalance: inv.current_balance,
+        totalDividends: 0,
+        dividendCount: 0,
+      };
+    }
+
+    // Proventos agrupados por tipo (dividendo, jcp, fii)
+    const typeDividends: Record<string, number> = {
+      dividendo: 0,
+      jcp: 0,
+      rendimento_fii: 0,
+    };
+
+    let totalRvDividends = 0;
+
+    for (const d of dividends) {
+      if (d.status === "recebido") {
+        const inv = rvInvMap.get(d.investment_id);
+        if (inv) {
+          if (!assetDividends[d.investment_id]) {
+            assetDividends[d.investment_id] = {
+              investmentId: d.investment_id,
+              name: inv.name,
+              ticker: inv.ticker,
+              subType: inv.sub_type,
+              currentBalance: inv.current_balance,
+              totalDividends: 0,
+              dividendCount: 0,
+            };
+          }
+          assetDividends[d.investment_id].totalDividends += d.amount;
+          assetDividends[d.investment_id].dividendCount += 1;
+          typeDividends[d.type] = (typeDividends[d.type] ?? 0) + d.amount;
+          totalRvDividends += d.amount;
+        }
+      }
+    }
+
+    const byAssetList = Object.values(assetDividends).sort(
+      (a, b) => b.totalDividends - a.totalDividends,
+    );
+
+    return {
+      totalRvDividends,
+      byAssetList,
+      typeDividends,
+      totalRvBalance: rvInvestments.reduce((acc, i) => acc + i.current_balance, 0),
+    };
+  }, [investments, dividends]);
+
+  // Relatório por Indexador
   const indexerReport = useMemo(() => {
     const map: Record<string, number> = {};
     for (const inv of investments.filter((i) => i.status === "ativo")) {
@@ -195,7 +273,7 @@ function RelatoriosPage() {
             Central de Relatórios
           </h1>
           <p className="text-sm text-muted-foreground">
-            Acompanhe o rendimento do mês nos investimentos em R$ e %, metas financeiras, cronograma de vencimentos e controle de risco / FGC.
+            Acompanhe o rendimento do mês nos investimentos em R$ e %, relatórios detalhados de Renda Fixa e Renda Variável, e metas financeiras.
           </p>
         </div>
 
@@ -216,22 +294,22 @@ function RelatoriosPage() {
             <TrendingUp className="h-4 w-4" /> Rendimento do Mês (R$ e %)
           </TabsTrigger>
           <TabsTrigger
+            value="renda_fixa"
+            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+          >
+            <Landmark className="h-4 w-4" /> Renda Fixa & FGC
+          </TabsTrigger>
+          <TabsTrigger
+            value="renda_variavel"
+            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+          >
+            <DollarSign className="h-4 w-4" /> Renda Variável & Proventos
+          </TabsTrigger>
+          <TabsTrigger
             value="metas"
             className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
           >
             <TargetIcon className="h-4 w-4" /> Metas Financeiras
-          </TabsTrigger>
-          <TabsTrigger
-            value="vencimentos"
-            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
-          >
-            <Calendar className="h-4 w-4" /> Vencimentos Renda Fixa
-          </TabsTrigger>
-          <TabsTrigger
-            value="risco_fgc"
-            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
-          >
-            <ShieldCheck className="h-4 w-4" /> FGC & Indexadores
           </TabsTrigger>
         </TabsList>
 
@@ -245,7 +323,240 @@ function RelatoriosPage() {
           />
         </TabsContent>
 
-        {/* ABA 2: METAS FINANCEIRAS */}
+        {/* ABA 2: RELATÓRIO DE RENDA FIXA (VENCIMENTOS, INDEXADORES & FGC) */}
+        <TabsContent value="renda_fixa" className="space-y-6 focus-visible:outline-none">
+          {/* Cronograma de Vencimentos */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-5 w-5 text-primary" />
+              <h2 className="text-lg font-bold">Cronograma de Vencimentos (Renda Fixa)</h2>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {maturityReport.map((bucket) => (
+                <div key={bucket.label} className="panel p-4 space-y-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    {bucket.label}
+                  </p>
+                  <p className="num text-lg font-bold text-foreground">
+                    {formatCurrency(bucket.total)}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {bucket.items.length} {bucket.items.length === 1 ? "ativo" : "ativos"}
+                  </p>
+
+                  {bucket.items.length > 0 && (
+                    <div className="space-y-1 pt-2 border-t border-border/50">
+                      {bucket.items.slice(0, 2).map((i) => (
+                        <div key={i.id} className="truncate text-[10px] text-muted-foreground">
+                          · {i.name} ({formatDate(i.due_date)})
+                        </div>
+                      ))}
+                      {bucket.items.length > 2 && (
+                        <span className="text-[10px] text-primary">
+                          +{bucket.items.length - 2} outros
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Grid FGC & Indexadores */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            {/* FGC e Instituições */}
+            <div className="panel p-5">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div>
+                  <h2 className="text-base font-semibold">Exposição por Emissor & Limite FGC</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Garantia de até R$ 250.000,00 por conglomerado financeiro
+                  </p>
+                </div>
+                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {fgcReport.map((item) => (
+                  <div
+                    key={item.institution}
+                    className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-foreground">{item.institution}</span>
+                        {item.isOverFGC && (
+                          <span className="inline-flex items-center gap-1 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
+                            <AlertTriangle className="h-3 w-3" /> Acima do FGC
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        {item.percentOfTotal.toFixed(1)}% da carteira total
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="num text-sm font-bold text-foreground">
+                        {formatCurrency(item.total)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Isento: {formatCurrency(item.exemptTaxTotal)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Indexadores */}
+            <div className="panel p-5">
+              <div className="flex items-center justify-between border-b border-border pb-3">
+                <div>
+                  <h2 className="text-base font-semibold">Alocação por Indexador (CDI, IPCA, Pré)</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Proteção inflacionária vs Pós-fixado vs Taxas Fixas
+                  </p>
+                </div>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {indexerReport.map((item) => (
+                  <div
+                    key={item.indexer}
+                    className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-xs"
+                  >
+                    <div>
+                      <span className="font-bold text-foreground">{item.label}</span>
+                      <p className="text-[11px] text-muted-foreground">
+                        {item.percent.toFixed(1)}% da carteira
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <p className="num text-sm font-bold text-foreground">
+                        {formatCurrency(item.value)}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ABA 3: RELATÓRIO DE RENDA VARIÁVEL (PROVENTOS & RENDIMENTO PASSIVO) */}
+        <TabsContent value="renda_variavel" className="space-y-6 focus-visible:outline-none">
+          {/* Cards de Resumo de Proventos */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="panel p-4">
+              <p className="text-xs text-muted-foreground">Total de Proventos Acumulados</p>
+              <p className="num mt-1 text-xl font-bold text-primary">
+                {formatCurrency(rvReport.totalRvDividends)}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Dividendos, JCP e FIIs recebidos</p>
+            </div>
+            <div className="panel p-4">
+              <p className="text-xs text-muted-foreground">Rendimentos de FIIs</p>
+              <p className="num mt-1 text-xl font-bold text-foreground">
+                {formatCurrency(rvReport.typeDividends.rendimento_fii || 0)}
+              </p>
+              <p className="mt-1 text-[11px] text-success">Isentos de Imposto de Renda</p>
+            </div>
+            <div className="panel p-4">
+              <p className="text-xs text-muted-foreground">Dividendos de Ações</p>
+              <p className="num mt-1 text-xl font-bold text-foreground">
+                {formatCurrency(rvReport.typeDividends.dividendo || 0)}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Distribuição de lucros</p>
+            </div>
+            <div className="panel p-4">
+              <p className="text-xs text-muted-foreground">Juros sobre Capital Próprio (JCP)</p>
+              <p className="num mt-1 text-xl font-bold text-foreground">
+                {formatCurrency(rvReport.typeDividends.jcp || 0)}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">Tributação 15% retida na fonte</p>
+            </div>
+          </div>
+
+          {/* Tabela de Proventos por Ativo */}
+          <div className="panel p-5">
+            <div className="flex items-center justify-between border-b border-border pb-4">
+              <div>
+                <h2 className="text-base font-semibold">Proventos por Ativo de Renda Variável</h2>
+                <p className="text-xs text-muted-foreground">
+                  Acompanhamento de renda gerada por cada ação, fundo imobiliário ou BDR
+                </p>
+              </div>
+            </div>
+
+            {rvReport.byAssetList.length === 0 ? (
+              <div className="py-12 text-center text-sm text-muted-foreground">
+                Nenhum ativo de Renda Variável cadastrado.
+              </div>
+            ) : (
+              <div className="mt-4 divide-y divide-border">
+                {rvReport.byAssetList.map((asset) => {
+                  const yieldOnBalance =
+                    asset.currentBalance > 0
+                      ? (asset.totalDividends / asset.currentBalance) * 100
+                      : 0;
+
+                  return (
+                    <div
+                      key={asset.investmentId}
+                      className="flex flex-col gap-3 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-surface-strong font-bold text-foreground">
+                          {asset.ticker ? asset.ticker.slice(0, 4) : asset.name.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-foreground">{asset.name}</span>
+                            {asset.ticker && (
+                              <span className="rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold text-muted-foreground">
+                                {asset.ticker}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Saldo em carteira: {formatCurrency(asset.currentBalance)} · {asset.dividendCount} proventos recebidos
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-6 sm:justify-end">
+                        <div className="text-right">
+                          <p className="num text-sm font-bold text-success">
+                            {formatCurrency(asset.totalDividends)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Proventos acumulados
+                          </p>
+                        </div>
+
+                        <div className="min-w-20 text-right">
+                          <p className="num text-xs font-semibold text-primary">
+                            {yieldOnBalance > 0 ? `${yieldOnBalance.toFixed(2)}%` : "—"}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Yield s/ saldo
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ABA 4: METAS FINANCEIRAS */}
         <TabsContent value="metas" className="space-y-6 focus-visible:outline-none">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -341,130 +652,6 @@ function RelatoriosPage() {
             </div>
           )}
         </TabsContent>
-
-        {/* ABA 3: CRONOGRAMA DE VENCIMENTOS */}
-        <TabsContent value="vencimentos" className="space-y-6 focus-visible:outline-none">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-primary" />
-            <h2 className="text-lg font-bold">Cronograma de Vencimentos (Renda Fixa)</h2>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {maturityReport.map((bucket) => (
-              <div key={bucket.label} className="panel p-4 space-y-2">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                  {bucket.label}
-                </p>
-                <p className="num text-lg font-bold text-foreground">
-                  {formatCurrency(bucket.total)}
-                </p>
-                <p className="text-[11px] text-muted-foreground">
-                  {bucket.items.length} {bucket.items.length === 1 ? "ativo" : "ativos"}
-                </p>
-
-                {bucket.items.length > 0 && (
-                  <div className="space-y-1 pt-2 border-t border-border/50">
-                    {bucket.items.slice(0, 2).map((i) => (
-                      <div key={i.id} className="truncate text-[10px] text-muted-foreground">
-                        · {i.name} ({formatDate(i.due_date)})
-                      </div>
-                    ))}
-                    {bucket.items.length > 2 && (
-                      <span className="text-[10px] text-primary">
-                        +{bucket.items.length - 2} outros
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </TabsContent>
-
-        {/* ABA 4: RISCO & FGC */}
-        <TabsContent value="risco_fgc" className="space-y-6 focus-visible:outline-none">
-          <div className="grid gap-6 lg:grid-cols-2">
-            {/* FGC e Instituições */}
-            <div className="panel p-5">
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <div>
-                  <h2 className="text-base font-semibold">Exposição por Instituição & FGC</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Limite de R$ 250.000,00 por conglomerado financeiro garantido
-                  </p>
-                </div>
-                <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {fgcReport.map((item) => (
-                  <div
-                    key={item.institution}
-                    className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-xs"
-                  >
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-foreground">{item.institution}</span>
-                        {item.isOverFGC && (
-                          <span className="inline-flex items-center gap-1 rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold text-destructive">
-                            <AlertTriangle className="h-3 w-3" /> Acima do FGC
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-muted-foreground">
-                        {item.percentOfTotal.toFixed(1)}% do patrimônio total
-                      </p>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="num text-sm font-bold text-foreground">
-                        {formatCurrency(item.total)}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">
-                        Isento: {formatCurrency(item.exemptTaxTotal)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Indexadores */}
-            <div className="panel p-5">
-              <div className="flex items-center justify-between border-b border-border pb-3">
-                <div>
-                  <h2 className="text-base font-semibold">Alocação por Indexador</h2>
-                  <p className="text-xs text-muted-foreground">
-                    Proteção inflacionária vs Pós-fixado vs Renda Variável
-                  </p>
-                </div>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </div>
-
-              <div className="mt-4 space-y-3">
-                {indexerReport.map((item) => (
-                  <div
-                    key={item.indexer}
-                    className="flex items-center justify-between rounded-xl border border-border bg-surface p-3 text-xs"
-                  >
-                    <div>
-                      <span className="font-bold text-foreground">{item.label}</span>
-                      <p className="text-[11px] text-muted-foreground">
-                        {item.percent.toFixed(1)}% da carteira
-                      </p>
-                    </div>
-
-                    <div className="text-right">
-                      <p className="num text-sm font-bold text-foreground">
-                        {formatCurrency(item.value)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </TabsContent>
       </Tabs>
 
       {/* Modais */}
@@ -492,3 +679,4 @@ function RelatoriosPage() {
     </div>
   );
 }
+

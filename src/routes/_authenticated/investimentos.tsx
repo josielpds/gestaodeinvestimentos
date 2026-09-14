@@ -94,6 +94,22 @@ function InvestimentosPage() {
     });
   }, [investments, selectedCategory, statusFilter, search]);
 
+  // Contagens por categoria
+  const categoryStats = useMemo(() => {
+    const active = investments.filter((i) => (statusFilter === "todos" ? true : i.status === statusFilter));
+    const counts: Record<string, { count: number; total: number }> = {
+      todos: { count: active.length, total: active.reduce((acc, i) => acc + i.current_balance, 0) },
+    };
+    for (const c of CATEGORIES) {
+      const catItems = active.filter((i) => i.category === c);
+      counts[c] = {
+        count: catItems.length,
+        total: catItems.reduce((acc, i) => acc + i.current_balance, 0),
+      };
+    }
+    return counts;
+  }, [investments, statusFilter]);
+
   // Totais do filtro atual
   const stats = useMemo(() => {
     let applied = 0;
@@ -103,6 +119,7 @@ function InvestimentosPage() {
     let tax = 0;
     let net = 0;
     let profit = 0;
+    let taxExemptCount = 0;
 
     for (const inv of filteredInvestments) {
       const m = metricsFor(inv, transactions);
@@ -113,11 +130,12 @@ function InvestimentosPage() {
       tax += m.totalTax;
       net += m.netBalance;
       profit += m.grossProfit;
+      if (inv.tax_exempt) taxExemptCount++;
     }
 
     const profitPercent = applied > 0 ? (profit / applied) * 100 : 0;
 
-    return { applied, gross, iof, ir, tax, net, profit, profitPercent };
+    return { applied, gross, iof, ir, tax, net, profit, profitPercent, taxExemptCount };
   }, [filteredInvestments, transactions]);
 
   async function handleDelete() {
@@ -181,17 +199,35 @@ function InvestimentosPage() {
       {/* Cards de Métricas do Filtro */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="panel p-4">
-          <p className="text-xs text-muted-foreground">Total Aplicado</p>
+          <p className="text-xs text-muted-foreground">
+            {selectedCategory === "todos"
+              ? "Total Aplicado (Consolidado)"
+              : `Total Aplicado (${CATEGORY_LABELS[selectedCategory] || selectedCategory})`}
+          </p>
           <p className="num mt-1 text-xl font-bold text-foreground">
             {formatCurrency(stats.applied)}
           </p>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            {filteredInvestments.length} {filteredInvestments.length === 1 ? "ativo listado" : "ativos listados"}
+          </p>
         </div>
         <div className="panel p-4">
-          <p className="text-xs text-muted-foreground">Saldo Bruto Atual</p>
+          <p className="text-xs text-muted-foreground">
+            {selectedCategory === "todos"
+              ? "Saldo Bruto Consolidado"
+              : `Saldo Bruto (${CATEGORY_LABELS[selectedCategory] || selectedCategory})`}
+          </p>
           <p className="num mt-1 text-xl font-bold text-primary">{formatCurrency(stats.gross)}</p>
+          {selectedCategory === "renda_fixa" && stats.taxExemptCount > 0 && (
+            <p className="mt-1 text-[11px] text-success">
+              {stats.taxExemptCount} isentos de IR (LCI, LCA, CRI...)
+            </p>
+          )}
         </div>
         <div className="panel p-4">
-          <p className="text-xs text-muted-foreground">Lucro Bruto</p>
+          <p className="text-xs text-muted-foreground">
+            {selectedCategory === "renda_variavel" ? "Lucro por Valorização" : "Lucro Bruto Acumulado"}
+          </p>
           <p
             className={`num mt-1 text-xl font-bold ${stats.profit >= 0 ? "text-success" : "text-destructive"}`}
           >
@@ -220,22 +256,34 @@ function InvestimentosPage() {
             variant={selectedCategory === "todos" ? "default" : "ghost"}
             size="sm"
             onClick={() => setSelectedCategory("todos")}
-            className="text-xs"
+            className="text-xs h-8 px-3 rounded-lg"
           >
             Todos
+            <span className="ml-1.5 rounded-full bg-background/20 px-1.5 py-0.2 text-[10px] font-bold">
+              {categoryStats.todos?.count || 0}
+            </span>
           </Button>
-          {CATEGORIES.map((c) => (
-            <Button
-              key={c}
-              variant={selectedCategory === c ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setSelectedCategory(c)}
-              className="text-xs"
-            >
-              {CATEGORY_LABELS[c]}
-            </Button>
-          ))}
+          {CATEGORIES.map((c) => {
+            const count = categoryStats[c]?.count || 0;
+            return (
+              <Button
+                key={c}
+                variant={selectedCategory === c ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setSelectedCategory(c)}
+                className="text-xs h-8 px-3 rounded-lg"
+              >
+                {CATEGORY_LABELS[c]}
+                {count > 0 && (
+                  <span className="ml-1.5 rounded-full bg-background/20 px-1.5 py-0.2 text-[10px] font-bold">
+                    {count}
+                  </span>
+                )}
+              </Button>
+            );
+          })}
         </div>
+
 
         <div className="flex items-center gap-2">
           <div className="relative w-full sm:w-64">

@@ -334,3 +334,117 @@ export function summarize(
       .sort((a, b) => b.valor - a.valor),
   };
 }
+
+export interface CategorySummary {
+  category: string;
+  categoryLabel: string;
+  activeCount: number;
+  totalGross: number;
+  totalInvested: number;
+  totalIof: number;
+  totalIr: number;
+  totalTax: number;
+  totalNet: number;
+  grossProfit: number;
+  netProfit: number;
+  grossProfitPercent: number;
+  netProfitPercent: number;
+  taxExemptTotal: number;
+  taxExemptPercent: number;
+  bySubtype: { key: string; label: string; value: number; percent: number; count: number }[];
+  byIndexer: { key: string; label: string; value: number; percent: number }[];
+  byInstitution: { institution: string; valor: number; percent: number }[];
+  items: Investment[];
+}
+
+export function summarizeCategory(
+  category: string,
+  investments: Investment[],
+  transactions: Transaction[] = [],
+): CategorySummary {
+  const items = investments.filter((i) => i.status === "ativo" && i.category === category);
+  let totalGross = 0;
+  let totalInvested = 0;
+  let totalIof = 0;
+  let totalIr = 0;
+  let totalTax = 0;
+  let taxExemptTotal = 0;
+
+  const subtypeMap: Record<string, { value: number; count: number }> = {};
+  const indexerMap: Record<string, number> = {};
+  const instMap: Record<string, number> = {};
+
+  for (const inv of items) {
+    const m = metricsFor(inv, transactions);
+    totalGross += inv.current_balance;
+    totalInvested += m.investedTotal;
+    totalIof += m.estimatedIof;
+    totalIr += m.estimatedTax;
+    totalTax += m.totalTax;
+    if (inv.tax_exempt) {
+      taxExemptTotal += inv.current_balance;
+    }
+
+    // Subtype
+    const st = inv.sub_type || "outros";
+    if (!subtypeMap[st]) subtypeMap[st] = { value: 0, count: 0 };
+    subtypeMap[st].value += inv.current_balance;
+    subtypeMap[st].count += 1;
+
+    // Indexer
+    const idx = inv.indexer || "outros";
+    indexerMap[idx] = (indexerMap[idx] ?? 0) + inv.current_balance;
+
+    // Institution
+    const inst = inv.institution || "Outras";
+    instMap[inst] = (instMap[inst] ?? 0) + inv.current_balance;
+  }
+
+  const totalNet = totalGross - totalTax;
+  const grossProfit = totalGross - totalInvested;
+  const netProfit = totalNet - totalInvested;
+
+  return {
+    category,
+    categoryLabel: CATEGORY_LABELS[category] ?? category,
+    activeCount: items.length,
+    totalGross,
+    totalInvested,
+    totalIof,
+    totalIr,
+    totalTax,
+    totalNet,
+    grossProfit,
+    netProfit,
+    grossProfitPercent: totalInvested > 0 ? (grossProfit / totalInvested) * 100 : 0,
+    netProfitPercent: totalInvested > 0 ? (netProfit / totalInvested) * 100 : 0,
+    taxExemptTotal,
+    taxExemptPercent: totalGross > 0 ? (taxExemptTotal / totalGross) * 100 : 0,
+    bySubtype: Object.entries(subtypeMap)
+      .map(([key, data]) => ({
+        key,
+        label: SUBTYPE_LABELS[key] ?? key,
+        value: data.value,
+        percent: totalGross > 0 ? (data.value / totalGross) * 100 : 0,
+        count: data.count,
+      }))
+      .sort((a, b) => b.value - a.value),
+    byIndexer: Object.entries(indexerMap)
+      .map(([key, value]) => ({
+        key,
+        label: INDEXER_LABELS[key] ?? key,
+        value,
+        percent: totalGross > 0 ? (value / totalGross) * 100 : 0,
+      }))
+      .sort((a, b) => b.value - a.value),
+    byInstitution: Object.entries(instMap)
+      .map(([institution, valor]) => ({
+        institution,
+        valor,
+        percent: totalGross > 0 ? (valor / totalGross) * 100 : 0,
+      }))
+      .sort((a, b) => b.valor - a.valor),
+    items: items.sort((a, b) => b.current_balance - a.current_balance),
+  };
+}
+
