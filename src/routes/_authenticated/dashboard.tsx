@@ -60,6 +60,7 @@ import {
   summarizeCategory,
   todayISO,
 } from "@/lib/finance";
+import { calculateMonthProjection } from "@/lib/yield-calculator";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -98,6 +99,9 @@ function DashboardPage() {
 
   // Resumo Específico Renda Fixa
   const rfSummary = summarizeCategory("renda_fixa", investments, transactions);
+
+  // Projeção de Dias Úteis e Rendimento Diário de Renda Fixa (ANBIMA DU/252)
+  const rfMonthProjection = calculateMonthProjection(rfSummary.items);
 
   // Resumo Específico Renda Variável
   const rvSummary = summarizeCategory("renda_variavel", investments, transactions);
@@ -720,6 +724,32 @@ function DashboardPage() {
               hint={`IR: ${formatCurrency(rfSummary.totalIr)} | IOF: ${formatCurrency(rfSummary.totalIof)}`}
               icon={ShieldAlert}
             />
+          </div>
+
+          {/* Banner de Rendimento Diário DU/252 */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-foreground">Rendimento Diário Estimado:</span>
+                  <span className="num font-bold text-success text-sm">
+                    +{formatCurrency(rfMonthProjection.dailyYieldPortfolioEstimate)} / dia útil
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Convenção ANBIMA (252 dias úteis) · {rfMonthProjection.elapsedBusinessDays} de {rfMonthProjection.totalBusinessDays} dias úteis transcorridos no mês
+                </p>
+              </div>
+            </div>
+
+            <Button asChild variant="outline" size="sm" className="border-primary/30 hover:bg-primary/10 self-start sm:self-auto">
+              <Link to="/relatorios">
+                <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary" /> Ver Extrato Dia a Dia
+              </Link>
+            </Button>
           </div>
 
           {/* Gráficos Específicos de Renda Fixa */}

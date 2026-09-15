@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { GoalDialog } from "@/components/goal-dialog";
 import { MonthlyYieldReport } from "@/components/monthly-yield-report";
+import { DailyYieldView } from "@/components/daily-yield-view";
 import {
   useDeleteRow,
   useDividends,
@@ -286,28 +287,34 @@ function RelatoriosPage() {
 
       {/* Tabs de Navegação entre Relatórios */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 p-1 bg-surface border border-border h-auto gap-1 rounded-xl print:hidden">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 p-1 bg-surface border border-border h-auto gap-1 rounded-xl print:hidden">
           <TabsTrigger
             value="rendimento_mensal"
-            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+            className="flex items-center gap-1.5 py-2.5 text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
           >
-            <TrendingUp className="h-4 w-4" /> Rendimento do Mês (R$ e %)
+            <TrendingUp className="h-4 w-4" /> Rendimento do Mês
+          </TabsTrigger>
+          <TabsTrigger
+            value="rendimento_diario"
+            className="flex items-center gap-1.5 py-2.5 text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+          >
+            <Clock className="h-4 w-4" /> Extrato Diário & Feriados
           </TabsTrigger>
           <TabsTrigger
             value="renda_fixa"
-            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+            className="flex items-center gap-1.5 py-2.5 text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
           >
             <Landmark className="h-4 w-4" /> Renda Fixa & FGC
           </TabsTrigger>
           <TabsTrigger
             value="renda_variavel"
-            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+            className="flex items-center gap-1.5 py-2.5 text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
           >
             <DollarSign className="h-4 w-4" /> Renda Variável & Proventos
           </TabsTrigger>
           <TabsTrigger
             value="metas"
-            className="flex items-center gap-2 py-2.5 text-xs sm:text-sm font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
+            className="flex items-center gap-1.5 py-2.5 text-xs font-semibold data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-sm"
           >
             <TargetIcon className="h-4 w-4" /> Metas Financeiras
           </TabsTrigger>
@@ -323,7 +330,15 @@ function RelatoriosPage() {
           />
         </TabsContent>
 
-        {/* ABA 2: RELATÓRIO DE RENDA FIXA (VENCIMENTOS, INDEXADORES & FGC) */}
+        {/* ABA 2: EXTRATO DIÁRIO & PROJEÇÃO COM FERIADOS (ANBIMA DU/252) */}
+        <TabsContent value="rendimento_diario" className="space-y-6 focus-visible:outline-none">
+          <DailyYieldView
+            investments={investments}
+            transactions={transactions}
+          />
+        </TabsContent>
+
+        {/* ABA 3: RELATÓRIO DE RENDA FIXA (VENCIMENTOS, INDEXADORES & FGC) */}
         <TabsContent value="renda_fixa" className="space-y-6 focus-visible:outline-none">
           {/* Cronograma de Vencimentos */}
           <div className="space-y-3">
