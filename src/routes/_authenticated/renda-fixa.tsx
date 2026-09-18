@@ -63,7 +63,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/renda-fixa")({
   head: () => ({
-    meta: [{ title: "Renda Fixa — Finantria Invest" }],
+    meta: [{ title: "Renda Fixa — PatrimônioInvest" }],
   }),
   component: RendaFixaPage,
 });

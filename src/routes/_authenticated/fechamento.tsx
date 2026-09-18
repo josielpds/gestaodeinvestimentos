@@ -49,7 +49,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/fechamento")({
   head: () => ({
-    meta: [{ title: "Fechamento Mensal — Finantria Invest" }],
+    meta: [{ title: "Fechamento Mensal — PatrimônioInvest" }],
   }),
   component: FechamentoPage,
 });

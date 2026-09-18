@@ -17,12 +17,12 @@ export const Route = createFileRoute("/auth")({
   validateSearch: searchSchema,
   head: () => ({
     meta: [
-      { title: "Entrar — Finantria Invest" },
+      { title: "Entrar — PatrimônioInvest" },
       {
         name: "description",
         content: "Acesse sua conta para gerenciar sua carteira de investimentos.",
       },
-      { property: "og:title", content: "Entrar — Finantria Invest" },
+      { property: "og:title", content: "Entrar — PatrimônioInvest" },
       { property: "og:description", content: "Acesse o painel da sua carteira de investimentos." },
     ],
   }),
@@ -86,10 +86,10 @@ function AuthPage() {
       <div className="w-full max-w-md">
         <Link to="/" className="mb-8 flex items-center justify-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-lg font-bold text-primary-foreground shadow-glow">
-            F
+            P
           </div>
           <div>
-            <p className="font-display text-lg font-bold">Finantria Invest</p>
+            <p className="font-display text-lg font-bold">PatrimônioInvest</p>
             <p className="text-xs text-muted-foreground">Gestão de investimentos</p>
           </div>
         </Link>

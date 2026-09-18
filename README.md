@@ -1,4 +1,4 @@
-# 📈 Finantria - Sistema de Gestão de Investimentos & Patrimônio
+# 📈 PatrimônioInvest - Sistema de Gestão de Investimentos & Patrimônio
 
 Um sistema moderno, completo e intuitivo para gerenciamento de investimentos financeiros pessoais, controle de patrimônio líquido, proventos/dividendos, rebalanceamento automático de carteira e integração bancária Open Finance via Pluggy.
 

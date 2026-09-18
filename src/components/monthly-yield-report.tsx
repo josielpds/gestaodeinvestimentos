@@ -713,10 +713,10 @@ export function MonthlyYieldReport({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="h-8 w-8 rounded-lg bg-primary text-primary-foreground flex items-center justify-center font-bold text-base">
-              F
+              P
             </div>
             <div>
-              <h1 className="text-xl font-bold">Finantria Invest — Relatório de Rendimentos</h1>
+              <h1 className="text-xl font-bold">PatrimônioInvest — Relatório de Rendimentos</h1>
               <p className="text-xs text-muted-foreground">
                 {periodMode === "mensal"
                   ? `Mês: ${monthLabel(selectedMonth)}`

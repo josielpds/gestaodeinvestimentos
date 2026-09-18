@@ -14,13 +14,13 @@ import { useSession } from "@/hooks/use-session";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Finantria Invest — Gestão de Carteira de Investimentos" },
+      { title: "PatrimônioInvest — Gestão de Carteira de Investimentos" },
       {
         name: "description",
         content:
           "Plataforma para acompanhar renda fixa e variável: patrimônio consolidado, aportes, proventos, IR estimado, fechamento mensal e rebalanceamento.",
       },
-      { property: "og:title", content: "Finantria Invest — Gestão de Carteira" },
+      { property: "og:title", content: "PatrimônioInvest — Gestão de Carteira" },
       {
         property: "og:description",
         content:
@@ -72,10 +72,10 @@ function Landing() {
       <header className="mx-auto flex max-w-6xl items-center justify-between px-5 py-6">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg font-bold text-primary-foreground shadow-glow">
-            F
+            P
           </div>
           <div>
-            <p className="font-display text-lg font-bold">Finantria Invest</p>
+            <p className="font-display text-lg font-bold">PatrimônioInvest</p>
             <p className="text-xs text-muted-foreground">Renda fixa & variável</p>
           </div>
         </div>

@@ -54,7 +54,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/investimentos")({
   head: () => ({
-    meta: [{ title: "Carteira & Ativos — Finantria Invest" }],
+    meta: [{ title: "Carteira & Ativos — PatrimônioInvest" }],
   }),
   component: InvestimentosPage,
 });

@@ -26,7 +26,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/rebalanceamento")({
   head: () => ({
-    meta: [{ title: "Rebalanceamento & Metas — Finantria Invest" }],
+    meta: [{ title: "Rebalanceamento & Metas — PatrimônioInvest" }],
   }),
   component: RebalanceamentoPage,
 });

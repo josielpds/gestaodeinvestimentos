@@ -60,7 +60,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/renda-variavel")({
   head: () => ({
-    meta: [{ title: "Renda Variável — Finantria Invest" }],
+    meta: [{ title: "Renda Variável — PatrimônioInvest" }],
   }),
   component: RendaVariavelPage,
 });

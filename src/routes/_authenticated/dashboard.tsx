@@ -64,7 +64,7 @@ import { calculateMonthProjection } from "@/lib/yield-calculator";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
-    meta: [{ title: "Dashboard — Finantria Invest" }],
+    meta: [{ title: "Dashboard — PatrimônioInvest" }],
   }),
   component: DashboardPage,
 });

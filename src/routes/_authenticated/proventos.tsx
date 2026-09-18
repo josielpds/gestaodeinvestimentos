@@ -52,7 +52,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/proventos")({
   head: () => ({
-    meta: [{ title: "Proventos & Renda Passiva — Finantria Invest" }],
+    meta: [{ title: "Proventos & Renda Passiva — PatrimônioInvest" }],
   }),
   component: ProventosPage,
 });

@@ -54,10 +54,10 @@ function AppShell() {
           <div className="flex h-16 items-center justify-between gap-3">
             <Link to="/dashboard" className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary font-bold text-primary-foreground shadow-glow">
-                F
+                P
               </div>
               <div>
-                <p className="font-display text-base font-bold leading-tight">Finantria Invest</p>
+                <p className="font-display text-base font-bold leading-tight">PatrimônioInvest</p>
                 <p className="hidden text-xs text-muted-foreground sm:block">
                   Renda fixa & variável
                 </p>

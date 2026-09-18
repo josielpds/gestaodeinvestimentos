@@ -40,7 +40,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/transacoes")({
   head: () => ({
-    meta: [{ title: "Movimentações & Transações — Finantria Invest" }],
+    meta: [{ title: "Movimentações & Transações — PatrimônioInvest" }],
   }),
   component: TransacoesPage,
 });
