@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSaveRow } from "@/lib/data";
+import { useInvestments, useSaveRow } from "@/lib/data";
 import {
   TRANSACTION_LABELS,
   todayISO,
@@ -31,18 +31,20 @@ import {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  investments: Investment[];
-  transaction?: Transaction | null;
-  defaultInvestmentId?: string | null;
+  investments?: Investment[] | undefined;
+  transaction?: Transaction | null | undefined;
+  defaultInvestmentId?: string | null | undefined;
 }
 
 export function TransactionDialog({
   open,
   onOpenChange,
-  investments,
+  investments: propInvestments,
   transaction,
   defaultInvestmentId,
 }: Props) {
+  const { data: hookInvestments = [] } = useInvestments();
+  const investments = propInvestments ?? hookInvestments;
   const [form, setForm] = useState({
     investment_id: "",
     type: "aporte",

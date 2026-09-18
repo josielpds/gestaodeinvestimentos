@@ -206,8 +206,11 @@ function RelatoriosPage() {
               dividendCount: 0,
             };
           }
-          assetDividends[d.investment_id].totalDividends += d.amount;
-          assetDividends[d.investment_id].dividendCount += 1;
+          const item = assetDividends[d.investment_id];
+          if (item) {
+            item.totalDividends += d.amount;
+            item.dividendCount += 1;
+          }
           typeDividends[d.type] = (typeDividends[d.type] ?? 0) + d.amount;
           totalRvDividends += d.amount;
         }
@@ -477,21 +480,21 @@ function RelatoriosPage() {
             <div className="panel p-4">
               <p className="text-xs text-muted-foreground">Rendimentos de FIIs</p>
               <p className="num mt-1 text-xl font-bold text-foreground">
-                {formatCurrency(rvReport.typeDividends.rendimento_fii || 0)}
+                {formatCurrency(rvReport.typeDividends["rendimento_fii"] || 0)}
               </p>
               <p className="mt-1 text-[11px] text-success">Isentos de Imposto de Renda</p>
             </div>
             <div className="panel p-4">
               <p className="text-xs text-muted-foreground">Dividendos de Ações</p>
               <p className="num mt-1 text-xl font-bold text-foreground">
-                {formatCurrency(rvReport.typeDividends.dividendo || 0)}
+                {formatCurrency(rvReport.typeDividends["dividendo"] || 0)}
               </p>
               <p className="mt-1 text-[11px] text-muted-foreground">Distribuição de lucros</p>
             </div>
             <div className="panel p-4">
               <p className="text-xs text-muted-foreground">Juros sobre Capital Próprio (JCP)</p>
               <p className="num mt-1 text-xl font-bold text-foreground">
-                {formatCurrency(rvReport.typeDividends.jcp || 0)}
+                {formatCurrency(rvReport.typeDividends["jcp"] || 0)}
               </p>
               <p className="mt-1 text-[11px] text-muted-foreground">Tributação 15% retida na fonte</p>
             </div>

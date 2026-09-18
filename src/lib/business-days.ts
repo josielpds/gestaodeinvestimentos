@@ -121,15 +121,15 @@ export function isWeekend(dateStr: string | Date): boolean {
 /**
  * Retorna informações sobre o feriado de uma data (se houver).
  */
-export function getHolidayInfo(dateStr: string): { isHoliday: boolean; name?: string } {
+export function getHolidayInfo(dateStr: string): { isHoliday: boolean; name?: string | undefined } {
   const s = dateStr.slice(0, 10);
   const year = Number(s.slice(0, 4));
-  if (Number.isNaN(year)) return { isHoliday: false };
+  if (Number.isNaN(year)) return { isHoliday: false, name: undefined };
   const holidays = getCachedHolidays(year);
   const name = holidays[s];
   return {
     isHoliday: !!name,
-    name,
+    name: name ?? undefined,
   };
 }
 
@@ -186,7 +186,7 @@ export interface DayDetail {
   isBusinessDay: boolean;
   isWeekend: boolean;
   isHoliday: boolean;
-  holidayName?: string;
+  holidayName?: string | undefined;
   isPastOrToday: boolean;
 }
 

@@ -40,6 +40,7 @@ import {
   type Investment,
   type Transaction,
 } from "@/lib/finance";
+import { useInvestments, useTransactions } from "@/lib/data";
 import {
   DEFAULT_BENCHMARKS,
   calculateDailyEvolution,
@@ -50,11 +51,20 @@ import {
 import { getMonthDaysDetail, isBusinessDay } from "@/lib/business-days";
 
 interface DailyYieldViewProps {
-  investments: Investment[];
+  investments?: Investment[];
   transactions?: Transaction[];
 }
 
-export function DailyYieldView({ investments, transactions = [] }: DailyYieldViewProps) {
+export function DailyYieldView({
+  investments: propInvestments,
+  transactions: propTransactions,
+}: DailyYieldViewProps = {}) {
+  const { data: hookInvestments = [] } = useInvestments();
+  const { data: hookTransactions = [] } = useTransactions();
+
+  const investments = propInvestments ?? hookInvestments;
+  const transactions = propTransactions ?? hookTransactions;
+
   const currentYM = currentYearMonth();
   const [selectedYearMonth, setSelectedYearMonth] = useState<string>(currentYM);
   const [selectedInvestmentId, setSelectedInvestmentId] = useState<string>("all_fixed");

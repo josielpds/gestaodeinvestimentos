@@ -964,7 +964,7 @@ function DashboardPage() {
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mt-0.5">
                             <span className="rounded bg-accent px-1.5 py-0.2 text-[10px] font-medium">
                               {INDEXER_LABELS[inv.indexer] || inv.indexer}
-                              {inv.indexer_rate ? ` (${inv.indexer_rate}%)` : ""}
+                              {inv.contract_rate ? ` (${inv.contract_rate})` : ""}
                             </span>
                             <span>· Dia {m.daysHeld}</span>
                             <span>
@@ -1283,8 +1283,8 @@ function DashboardPage() {
                             {inv.quantity ? (
                               <span>· {inv.quantity} cotas/ações</span>
                             ) : null}
-                            {inv.unit_price ? (
-                              <span>· Preço Médio: {formatCurrency(inv.unit_price)}</span>
+                            {inv.average_price ? (
+                              <span>· Preço Médio: {formatCurrency(inv.average_price)}</span>
                             ) : null}
                           </div>
                         </div>

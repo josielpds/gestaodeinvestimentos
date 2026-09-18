@@ -9,6 +9,7 @@ import {
   LogOut,
   PieChart,
   Receipt,
+  TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -27,12 +28,9 @@ export const Route = createFileRoute("/_authenticated")({
 
 const tabs = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { to: "/fechamento", label: "Fechamento Mensal", icon: Calendar },
-  { to: "/investimentos", label: "Carteira & Ativos", icon: Landmark },
-  { to: "/transacoes", label: "Movimentações", icon: Receipt },
-  { to: "/proventos", label: "Proventos & Renda", icon: DollarSign },
-  { to: "/rebalanceamento", label: "Rebalanceamento & Metas", icon: PieChart },
-  { to: "/relatorios", label: "Relatórios", icon: FileText },
+  { to: "/renda-fixa", label: "Renda Fixa", icon: Landmark },
+  { to: "/renda-variavel", label: "Renda Variável", icon: TrendingUp },
+  { to: "/relatorios", label: "Relatórios & Extratos", icon: FileText },
 ] as const;
 
 function AppShell() {

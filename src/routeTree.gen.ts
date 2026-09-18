@@ -18,6 +18,8 @@ import { Route as AuthenticatedInvestimentosRouteImport } from './routes/_authen
 import { Route as AuthenticatedProventosRouteImport } from './routes/_authenticated/proventos'
 import { Route as AuthenticatedRebalanceamentoRouteImport } from './routes/_authenticated/rebalanceamento'
 import { Route as AuthenticatedRelatoriosRouteImport } from './routes/_authenticated/relatorios'
+import { Route as AuthenticatedRendaFixaRouteImport } from './routes/_authenticated/renda-fixa'
+import { Route as AuthenticatedRendaVariavelRouteImport } from './routes/_authenticated/renda-variavel'
 import { Route as AuthenticatedTransacoesRouteImport } from './routes/_authenticated/transacoes'
 
 const IndexRoute = IndexRouteImport.update({
@@ -66,6 +68,17 @@ const AuthenticatedRelatoriosRoute = AuthenticatedRelatoriosRouteImport.update({
   path: '/relatorios',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedRendaFixaRoute = AuthenticatedRendaFixaRouteImport.update({
+  id: '/renda-fixa',
+  path: '/renda-fixa',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedRendaVariavelRoute =
+  AuthenticatedRendaVariavelRouteImport.update({
+    id: '/renda-variavel',
+    path: '/renda-variavel',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedTransacoesRoute = AuthenticatedTransacoesRouteImport.update({
   id: '/transacoes',
   path: '/transacoes',
@@ -81,6 +94,8 @@ export interface FileRoutesByFullPath {
   '/proventos': typeof AuthenticatedProventosRoute
   '/rebalanceamento': typeof AuthenticatedRebalanceamentoRoute
   '/relatorios': typeof AuthenticatedRelatoriosRoute
+  '/renda-fixa': typeof AuthenticatedRendaFixaRoute
+  '/renda-variavel': typeof AuthenticatedRendaVariavelRoute
   '/transacoes': typeof AuthenticatedTransacoesRoute
 }
 export interface FileRoutesByTo {
@@ -92,6 +107,8 @@ export interface FileRoutesByTo {
   '/proventos': typeof AuthenticatedProventosRoute
   '/rebalanceamento': typeof AuthenticatedRebalanceamentoRoute
   '/relatorios': typeof AuthenticatedRelatoriosRoute
+  '/renda-fixa': typeof AuthenticatedRendaFixaRoute
+  '/renda-variavel': typeof AuthenticatedRendaVariavelRoute
   '/transacoes': typeof AuthenticatedTransacoesRoute
 }
 export interface FileRoutesById {
@@ -105,6 +122,8 @@ export interface FileRoutesById {
   '/_authenticated/proventos': typeof AuthenticatedProventosRoute
   '/_authenticated/rebalanceamento': typeof AuthenticatedRebalanceamentoRoute
   '/_authenticated/relatorios': typeof AuthenticatedRelatoriosRoute
+  '/_authenticated/renda-fixa': typeof AuthenticatedRendaFixaRoute
+  '/_authenticated/renda-variavel': typeof AuthenticatedRendaVariavelRoute
   '/_authenticated/transacoes': typeof AuthenticatedTransacoesRoute
 }
 export interface FileRouteTypes {
@@ -118,6 +137,8 @@ export interface FileRouteTypes {
     | '/proventos'
     | '/rebalanceamento'
     | '/relatorios'
+    | '/renda-fixa'
+    | '/renda-variavel'
     | '/transacoes'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -129,6 +150,8 @@ export interface FileRouteTypes {
     | '/proventos'
     | '/rebalanceamento'
     | '/relatorios'
+    | '/renda-fixa'
+    | '/renda-variavel'
     | '/transacoes'
   id:
     | '__root__'
@@ -141,6 +164,8 @@ export interface FileRouteTypes {
     | '/_authenticated/proventos'
     | '/_authenticated/rebalanceamento'
     | '/_authenticated/relatorios'
+    | '/_authenticated/renda-fixa'
+    | '/_authenticated/renda-variavel'
     | '/_authenticated/transacoes'
   fileRoutesById: FileRoutesById
 }
@@ -215,6 +240,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRelatoriosRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/renda-fixa': {
+      id: '/_authenticated/renda-fixa'
+      path: '/renda-fixa'
+      fullPath: '/renda-fixa'
+      preLoaderRoute: typeof AuthenticatedRendaFixaRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/renda-variavel': {
+      id: '/_authenticated/renda-variavel'
+      path: '/renda-variavel'
+      fullPath: '/renda-variavel'
+      preLoaderRoute: typeof AuthenticatedRendaVariavelRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/transacoes': {
       id: '/_authenticated/transacoes'
       path: '/transacoes'
@@ -232,6 +271,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedProventosRoute: typeof AuthenticatedProventosRoute
   AuthenticatedRebalanceamentoRoute: typeof AuthenticatedRebalanceamentoRoute
   AuthenticatedRelatoriosRoute: typeof AuthenticatedRelatoriosRoute
+  AuthenticatedRendaFixaRoute: typeof AuthenticatedRendaFixaRoute
+  AuthenticatedRendaVariavelRoute: typeof AuthenticatedRendaVariavelRoute
   AuthenticatedTransacoesRoute: typeof AuthenticatedTransacoesRoute
 }
 
@@ -242,6 +283,8 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedProventosRoute: AuthenticatedProventosRoute,
   AuthenticatedRebalanceamentoRoute: AuthenticatedRebalanceamentoRoute,
   AuthenticatedRelatoriosRoute: AuthenticatedRelatoriosRoute,
+  AuthenticatedRendaFixaRoute: AuthenticatedRendaFixaRoute,
+  AuthenticatedRendaVariavelRoute: AuthenticatedRendaVariavelRoute,
   AuthenticatedTransacoesRoute: AuthenticatedTransacoesRoute,
 }
 

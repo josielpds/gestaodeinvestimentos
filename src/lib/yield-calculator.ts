@@ -95,7 +95,14 @@ export function getDailyYieldMetrics(
   dailyRatePercent: number; // ex: 0.0418%
   dailyYieldAmountEstimate: number; // R$ gerado em 1 dia útil sobre o saldo atual
 } {
-  const effectiveAnnualRate = getEffectiveAnnualRate(inv.indexer, inv.indexer_rate, benchmarks);
+  const parsedRate = inv.contract_rate
+    ? parseFloat(inv.contract_rate.replace(/[^0-9.,]/g, "").replace(",", "."))
+    : undefined;
+  const effectiveAnnualRate = getEffectiveAnnualRate(
+    inv.indexer,
+    Number.isNaN(parsedRate) ? undefined : parsedRate,
+    benchmarks,
+  );
   const dailyRate = annualToDailyRate(effectiveAnnualRate);
   const dailyRatePercent = dailyRate * 100;
   const dailyYieldAmountEstimate = inv.current_balance * dailyRate;
@@ -116,7 +123,7 @@ export interface DayEvolution {
   isBusinessDay: boolean;
   isWeekend: boolean;
   isHoliday: boolean;
-  holidayName?: string;
+  holidayName?: string | undefined;
   isPastOrToday: boolean;
   startBalance: number;
   yieldRate: number; // 0 nos fins de semana/feriados

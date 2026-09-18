@@ -415,15 +415,19 @@ export function MonthlyYieldReport({
     };
 
     for (const inv of active) {
-      if (catMap[inv.category]) {
-        catMap[inv.category].currentBalance += inv.current_balance;
+      const entry = catMap[inv.category];
+      if (entry) {
+        entry.currentBalance += inv.current_balance;
       }
     }
 
     for (const d of monthDividends) {
       const inv = investments.find((i) => i.id === d.investment_id);
-      if (inv && catMap[inv.category]) {
-        catMap[inv.category].dividendsAmount += d.amount;
+      if (inv) {
+        const entry = catMap[inv.category];
+        if (entry) {
+          entry.dividendsAmount += d.amount;
+        }
       }
     }
 

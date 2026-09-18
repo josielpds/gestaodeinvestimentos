@@ -260,7 +260,7 @@ function InvestimentosPage() {
           >
             Todos
             <span className="ml-1.5 rounded-full bg-background/20 px-1.5 py-0.2 text-[10px] font-bold">
-              {categoryStats.todos?.count || 0}
+              {categoryStats["todos"]?.count || 0}
             </span>
           </Button>
           {CATEGORIES.map((c) => {

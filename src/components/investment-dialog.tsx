@@ -36,6 +36,7 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   investment?: Investment | null;
+  defaultCategory?: (typeof CATEGORIES)[number];
 }
 
 const empty = {
@@ -59,7 +60,7 @@ const empty = {
   notes: "",
 };
 
-export function InvestmentDialog({ open, onOpenChange, investment }: Props) {
+export function InvestmentDialog({ open, onOpenChange, investment, defaultCategory }: Props) {
   const [form, setForm] = useState({ ...empty });
   const save = useSaveRow("investments");
 
@@ -87,9 +88,11 @@ export function InvestmentDialog({ open, onOpenChange, investment }: Props) {
         notes: investment.notes ?? "",
       });
     } else {
-      setForm({ ...empty });
+      const cat = defaultCategory ?? "renda_fixa";
+      const sub = cat === "renda_fixa" ? "cdb" : cat === "cripto" ? "crypto" : cat === "internacional" ? "exterior" : "acao";
+      setForm({ ...empty, category: cat, sub_type: sub });
     }
-  }, [open, investment]);
+  }, [open, investment, defaultCategory]);
 
   const isVariable = form.category !== "renda_fixa";
 

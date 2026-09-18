@@ -6,7 +6,7 @@
 
 /*
  * Finantria Invest — design system
- * Dark "mesa de operações": slate profundo + esmeralda.
+ * Tema Dark Moderno: Slate Profundo + Azul Claro (Sky / Cyan Blue).
  * Todos os valores são tokens semânticos; nunca use cores fixas em componentes.
  */
 
@@ -63,61 +63,63 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --shadow-glow: 0 18px 50px -20px oklch(0.72 0.16 165 / 0.45);
-  --shadow-panel: 0 20px 60px -30px oklch(0.1 0.03 250 / 0.9);
+  --shadow-glow: 0 18px 50px -20px oklch(0.72 0.16 220 / 0.5);
+  --shadow-panel: 0 20px 60px -30px oklch(0.1 0.04 240 / 0.9);
 }
 
 :root {
   --radius: 0.875rem;
 
-  --background: oklch(0.185 0.028 256);
-  --foreground: oklch(0.968 0.006 250);
-  --surface: oklch(0.235 0.03 256);
-  --surface-strong: oklch(0.275 0.032 256);
+  --background: oklch(0.16 0.028 245);
+  --foreground: oklch(0.97 0.008 240);
+  --surface: oklch(0.20 0.035 245);
+  --surface-strong: oklch(0.24 0.04 245);
 
-  --card: oklch(0.232 0.03 256);
-  --card-foreground: oklch(0.968 0.006 250);
-  --popover: oklch(0.235 0.03 256);
-  --popover-foreground: oklch(0.968 0.006 250);
+  --card: oklch(0.195 0.035 245);
+  --card-foreground: oklch(0.97 0.008 240);
+  --popover: oklch(0.20 0.035 245);
+  --popover-foreground: oklch(0.97 0.008 240);
 
-  --primary: oklch(0.76 0.16 166);
-  --primary-foreground: oklch(0.19 0.03 256);
+  /* Azul Claro Vibrante / Sky Blue */
+  --primary: oklch(0.72 0.16 220);
+  --primary-foreground: oklch(0.16 0.03 245);
 
-  --secondary: oklch(0.29 0.03 256);
-  --secondary-foreground: oklch(0.95 0.008 250);
+  --secondary: oklch(0.26 0.035 245);
+  --secondary-foreground: oklch(0.95 0.008 240);
 
-  --muted: oklch(0.285 0.028 256);
-  --muted-foreground: oklch(0.71 0.024 254);
+  --muted: oklch(0.25 0.03 245);
+  --muted-foreground: oklch(0.72 0.025 240);
 
-  --accent: oklch(0.32 0.035 256);
-  --accent-foreground: oklch(0.97 0.006 250);
+  --accent: oklch(0.28 0.045 235);
+  --accent-foreground: oklch(0.98 0.006 240);
 
   --destructive: oklch(0.63 0.2 18);
-  --destructive-foreground: oklch(0.98 0.005 250);
+  --destructive-foreground: oklch(0.98 0.005 240);
 
-  --success: oklch(0.76 0.16 166);
-  --success-foreground: oklch(0.19 0.03 256);
+  --success: oklch(0.74 0.15 190);
+  --success-foreground: oklch(0.16 0.03 245);
   --warning: oklch(0.8 0.15 78);
-  --warning-foreground: oklch(0.2 0.03 256);
+  --warning-foreground: oklch(0.2 0.03 245);
 
-  --border: oklch(0.33 0.03 256);
-  --input: oklch(0.33 0.03 256);
-  --ring: oklch(0.76 0.16 166);
+  --border: oklch(0.28 0.035 240);
+  --input: oklch(0.28 0.035 240);
+  --ring: oklch(0.72 0.16 220);
 
-  --chart-1: oklch(0.76 0.16 166);
-  --chart-2: oklch(0.68 0.16 250);
-  --chart-3: oklch(0.7 0.17 305);
-  --chart-4: oklch(0.8 0.15 78);
-  --chart-5: oklch(0.68 0.14 205);
+  /* Tons de Azul Claro para Gráficos */
+  --chart-1: oklch(0.72 0.16 220); /* Sky Blue */
+  --chart-2: oklch(0.76 0.14 195); /* Light Cyan */
+  --chart-3: oklch(0.65 0.18 250); /* Royal Blue */
+  --chart-4: oklch(0.82 0.12 210); /* Ice Blue */
+  --chart-5: oklch(0.68 0.16 275); /* Soft Indigo */
 
-  --sidebar: oklch(0.21 0.028 256);
-  --sidebar-foreground: oklch(0.95 0.008 250);
-  --sidebar-primary: oklch(0.76 0.16 166);
-  --sidebar-primary-foreground: oklch(0.19 0.03 256);
-  --sidebar-accent: oklch(0.3 0.03 256);
-  --sidebar-accent-foreground: oklch(0.97 0.006 250);
-  --sidebar-border: oklch(0.33 0.03 256);
-  --sidebar-ring: oklch(0.76 0.16 166);
+  --sidebar: oklch(0.18 0.03 245);
+  --sidebar-foreground: oklch(0.95 0.008 240);
+  --sidebar-primary: oklch(0.72 0.16 220);
+  --sidebar-primary-foreground: oklch(0.16 0.03 245);
+  --sidebar-accent: oklch(0.26 0.04 240);
+  --sidebar-accent-foreground: oklch(0.98 0.006 240);
+  --sidebar-border: oklch(0.28 0.035 240);
+  --sidebar-ring: oklch(0.72 0.16 220);
 }
 
 @layer base {
@@ -154,6 +156,6 @@
 
 @utility aurora {
   background-image:
-    radial-gradient(circle at 12% -10%, oklch(0.76 0.16 166 / 0.18), transparent 45%),
-    radial-gradient(circle at 88% 0%, oklch(0.68 0.16 250 / 0.14), transparent 42%);
+    radial-gradient(circle at 12% -10%, oklch(0.72 0.16 220 / 0.22), transparent 45%),
+    radial-gradient(circle at 88% 0%, oklch(0.76 0.14 195 / 0.18), transparent 42%);
 }
