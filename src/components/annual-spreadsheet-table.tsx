@@ -27,6 +27,7 @@ interface AnnualSpreadsheetProps {
   year: number;
   snapshots: Snapshot[];
   investmentId?: string | null;
+  allowEditProfit?: boolean;
   accentColor?: "blue" | "emerald";
   onSnapshotSaved?: () => void;
 }
@@ -47,15 +48,16 @@ export function AnnualSpreadsheetTable({
   year,
   snapshots,
   investmentId = null,
+  allowEditProfit = false,
   accentColor = "blue",
   onSnapshotSaved,
 }: AnnualSpreadsheetProps) {
   const saveSnapshot = useSaveRow("monthly_snapshots");
   const deleteSnapshot = useDeleteRow("monthly_snapshots");
 
-  // Estado dos valores em edição por mês: { "2026-01": { initial: 1000, final: 1100 } }
+  // Estado dos valores em edição por mês: { "2026-01": { initial: "1000", final: "1100", profit: "100", isDirty: false } }
   const [editingRows, setEditingRows] = useState<
-    Record<string, { initial: string; final: string; isDirty: boolean }>
+    Record<string, { initial: string; final: string; profit: string; isDirty: boolean }>
   >({});
   const [savingMonth, setSavingMonth] = useState<string | null>(null);
 
@@ -75,12 +77,16 @@ export function AnnualSpreadsheetTable({
       if (found) {
         const initial = Number(found.initial_balance) || 0;
         const final = Number(found.final_balance) || 0;
-        const profit = found.profit_amount !== undefined && found.profit_amount !== null
-          ? Number(found.profit_amount)
-          : final - initial;
-        const percent = found.profit_percent !== undefined && found.profit_percent !== null
-          ? Number(found.profit_percent)
-          : initial > 0 ? (profit / initial) * 100 : 0;
+        const profit =
+          found.profit_amount !== undefined && found.profit_amount !== null
+            ? Number(found.profit_amount)
+            : final - initial;
+        const percent =
+          found.profit_percent !== undefined && found.profit_percent !== null
+            ? Number(found.profit_percent)
+            : initial > 0
+              ? (profit / initial) * 100
+              : 0;
 
         return {
           yearMonth,
@@ -109,11 +115,15 @@ export function AnnualSpreadsheetTable({
 
   // Inicializa o estado de edição quando os dados mudam
   useEffect(() => {
-    const initialEditing: Record<string, { initial: string; final: string; isDirty: boolean }> = {};
+    const initialEditing: Record<
+      string,
+      { initial: string; final: string; profit: string; isDirty: boolean }
+    > = {};
     for (const r of rows) {
       initialEditing[r.yearMonth] = {
         initial: r.hasData && r.initialBalance > 0 ? String(r.initialBalance) : "",
         final: r.hasData && r.finalBalance > 0 ? String(r.finalBalance) : "",
+        profit: r.hasData && (r.profitAmount !== 0 || r.finalBalance > 0) ? String(r.profitAmount) : "",
         isDirty: false,
       };
     }
@@ -130,14 +140,18 @@ export function AnnualSpreadsheetTable({
     for (const r of rows) {
       const edit = editingRows[r.yearMonth];
       const initial = edit?.isDirty
-        ? Number(edit.initial) || 0
+        ? parseFloat(edit.initial.replace(",", ".")) || 0
         : r.initialBalance;
       const final = edit?.isDirty
-        ? Number(edit.final) || 0
+        ? parseFloat(edit.final.replace(",", ".")) || 0
         : r.finalBalance;
+      const profit = edit?.isDirty
+        ? edit.profit !== ""
+          ? parseFloat(edit.profit.replace(",", ".")) || 0
+          : final - initial
+        : r.profitAmount;
 
-      if (r.hasData || (edit?.isDirty && (initial > 0 || final > 0))) {
-        const profit = final - initial;
+      if (r.hasData || (edit?.isDirty && (initial > 0 || final > 0 || profit !== 0))) {
         totalProfit += profit;
         sumInitialForActive += initial;
         monthsWithData++;
@@ -158,16 +172,29 @@ export function AnnualSpreadsheetTable({
     };
   }, [rows, editingRows]);
 
-  function handleInputChange(yearMonth: string, field: "initial" | "final", value: string) {
+  function handleInputChange(
+    yearMonth: string,
+    field: "initial" | "final" | "profit",
+    value: string,
+  ) {
     setEditingRows((prev) => {
-      const current = prev[yearMonth] || { initial: "", final: "", isDirty: false };
+      const current = prev[yearMonth] || { initial: "", final: "", profit: "", isDirty: false };
+      const updated = {
+        ...current,
+        [field]: value,
+        isDirty: true,
+      };
+
+      // Se não for edição manual de lucro e o usuário mudou initial ou final, atualiza profit automaticamente
+      if (!allowEditProfit && (field === "initial" || field === "final")) {
+        const iVal = field === "initial" ? parseFloat(value.replace(",", ".")) || 0 : parseFloat(current.initial.replace(",", ".")) || 0;
+        const fVal = field === "final" ? parseFloat(value.replace(",", ".")) || 0 : parseFloat(current.final.replace(",", ".")) || 0;
+        updated.profit = String(fVal - iVal);
+      }
+
       return {
         ...prev,
-        [yearMonth]: {
-          ...current,
-          [field]: value,
-          isDirty: true,
-        },
+        [yearMonth]: updated,
       };
     });
   }
@@ -178,7 +205,9 @@ export function AnnualSpreadsheetTable({
 
     const initial = parseFloat(edit.initial.replace(",", ".")) || 0;
     const final = parseFloat(edit.final.replace(",", ".")) || 0;
-    const profit = final - initial;
+    const profit = edit.profit !== ""
+      ? parseFloat(edit.profit.replace(",", ".")) || 0
+      : final - initial;
     const percent = initial > 0 ? (profit / initial) * 100 : 0;
 
     setSavingMonth(yearMonth);
@@ -220,7 +249,7 @@ export function AnnualSpreadsheetTable({
       await deleteSnapshot.mutateAsync(snapshotId);
       setEditingRows((prev) => ({
         ...prev,
-        [yearMonth]: { initial: "", final: "", isDirty: false },
+        [yearMonth]: { initial: "", final: "", profit: "", isDirty: false },
       }));
       toast.success("Registro removido.");
       if (onSnapshotSaved) onSnapshotSaved();
@@ -339,9 +368,30 @@ export function AnnualSpreadsheetTable({
                     </div>
                   </td>
 
-                  {/* Lucro Mês (R$) - Calculado Automaticamente */}
-                  <td className="py-2.5 px-4 text-right border-r border-border/60 font-mono font-bold">
-                    {hasValue ? (
+                  {/* Lucro Mês (R$) - Editável se allowEditProfit for true, ou calculado automaticamente */}
+                  <td className="py-2 px-3 text-right border-r border-border/60 font-mono font-bold">
+                    {allowEditProfit ? (
+                      <div className="relative flex items-center justify-end">
+                        <span className="absolute left-2 text-[11px] text-muted-foreground font-mono">
+                          R$
+                        </span>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          placeholder="0,00"
+                          value={edit.profit}
+                          onChange={(e) =>
+                            handleInputChange(row.yearMonth, "profit", e.target.value)
+                          }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              handleSaveRow(row.yearMonth, row.snapshotId);
+                            }
+                          }}
+                          className="h-8 text-right font-mono text-xs pl-8 pr-2 font-bold text-emerald-400 bg-background/50 border-border/50 focus:bg-background"
+                        />
+                      </div>
+                    ) : hasValue ? (
                       <span
                         className={
                           isPositive
@@ -361,7 +411,7 @@ export function AnnualSpreadsheetTable({
                     {hasValue && currentInitial > 0 ? (
                       <span
                         className={
-                          isPositive
+                          liveProfit >= 0
                             ? "text-emerald-400"
                             : "text-rose-400"
                         }

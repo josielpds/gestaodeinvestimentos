@@ -50,15 +50,18 @@ import { TransactionDialog } from "@/components/transaction-dialog";
 import { RendaFixaSnapshotDialog } from "@/components/renda-fixa-snapshot-dialog";
 import { DailyYieldView } from "@/components/daily-yield-view";
 import { AnnualSpreadsheetTable } from "@/components/annual-spreadsheet-table";
+import { AnnualMonthlyYieldBar } from "@/components/annual-monthly-yield-bar";
 import { useDeleteRow, useInvestments, useSaveRow, useSnapshots, useTransactions } from "@/lib/data";
 import {
   INDEXER_LABELS,
   SUBTYPE_LABELS,
+  currentYearMonth,
   daysBetween,
   formatCurrency,
   formatDate,
   formatPercent,
   metricsFor,
+  monthLabel,
   todayISO,
   type Investment,
   type Snapshot,
@@ -80,6 +83,7 @@ export function RendaFixaPage() {
 
   // Ano de referência selecionado para as planilhas
   const currentYear = new Date().getFullYear();
+  const currentYM = currentYearMonth();
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
 
   // Filtra apenas ativos de renda fixa
@@ -107,37 +111,7 @@ export function RendaFixaPage() {
     }
   }, [cnpjAccount]);
 
-  // Auto-criação da conta CNPJ caso necessário para vincular snapshots da segunda tabela
-  async function ensureCnpjAccount(): Promise<string | null> {
-    if (cnpjAccountId) return cnpjAccountId;
-    if (cnpjAccount) return cnpjAccount.id;
-
-    try {
-      const res = await saveInv.mutateAsync({
-        values: {
-          name: "Saldo Conta Dia a Dia e CNPJ",
-          category: "renda_fixa",
-          sub_type: "poupanca",
-          institution: "Conta Caixa / PJ",
-          indexer: "cdi",
-          contract_rate: "100% CDI",
-          start_date: todayISO(),
-          liquidity: "Diária",
-          initial_amount: 0,
-          current_balance: 0,
-          status: "ativo",
-          tax_exempt: false,
-          notes: "Conta para registro de saldo dia a dia e CNPJ",
-        },
-      });
-      await refetchInvestments();
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  // Totais agregados da Renda Fixa
+  // Totais agregados da Renda Fixa tradicional
   const fixedStats = useMemo(() => {
     let totalGross = 0;
     let totalInvested = 0;
@@ -164,6 +138,59 @@ export function RendaFixaPage() {
       count: fixedInvestments.filter((i) => i.status === "ativo").length,
     };
   }, [fixedInvestments, transactions]);
+
+  // Cálculo Dinâmico do Saldo do Patrimônio em RF e Rendimento do Mês Atual baseado nas Planilhas
+  const spreadsheetMetrics = useMemo(() => {
+    const yearSnaps = snapshots.filter((s) => s.year_month.startsWith(String(selectedYear)));
+    const invSnaps = yearSnaps.filter((s) => !s.investment_id || s.investment_id === "null");
+    const cnpjSnaps = cnpjAccountId
+      ? yearSnaps.filter((s) => s.investment_id === cnpjAccountId)
+      : cnpjAccount
+        ? yearSnaps.filter((s) => s.investment_id === cnpjAccount.id)
+        : [];
+
+    // Snapshot do mês atual
+    const currentInvSnap = invSnaps.find((s) => s.year_month === currentYM);
+    const currentCnpjSnap = cnpjSnaps.find((s) => s.year_month === currentYM);
+
+    // Último snapshot preenchido do ano
+    const latestInvSnap =
+      currentInvSnap ??
+      [...invSnaps].sort((a, b) => b.year_month.localeCompare(a.year_month))[0];
+    const latestCnpjSnap =
+      currentCnpjSnap ??
+      [...cnpjSnaps].sort((a, b) => b.year_month.localeCompare(a.year_month))[0];
+
+    const invFinal = Number(latestInvSnap?.final_balance) || 0;
+    const cnpjFinal = Number(latestCnpjSnap?.final_balance) || 0;
+
+    // Saldo do Patrimônio: soma dos saldos finais das planilhas ou fallback
+    const totalPatrimonioRF =
+      invFinal + cnpjFinal > 0 ? invFinal + cnpjFinal : fixedStats.totalGross;
+
+    // Rendimento do Mês Atual somado (Investimentos + Conta Dia a Dia)
+    const currentInvProfit = Number(currentInvSnap?.profit_amount) || 0;
+    const currentCnpjProfit = Number(currentCnpjSnap?.profit_amount) || 0;
+    const currentMonthTotalYield = currentInvProfit + currentCnpjProfit;
+
+    // Lucro Total no Ano Selecionado
+    const totalYearProfit = yearSnaps.reduce((acc, s) => {
+      const p =
+        s.profit_amount !== undefined && s.profit_amount !== null
+          ? Number(s.profit_amount)
+          : (Number(s.final_balance) || 0) - (Number(s.initial_balance) || 0);
+      return acc + p;
+    }, 0);
+
+    const refMonth = currentInvSnap?.year_month ?? latestInvSnap?.year_month ?? currentYM;
+
+    return {
+      totalPatrimonioRF,
+      currentMonthTotalYield,
+      totalYearProfit,
+      refMonth,
+    };
+  }, [snapshots, selectedYear, currentYM, cnpjAccountId, cnpjAccount, fixedStats.totalGross]);
 
   // Modais de controle
   const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
@@ -267,9 +294,9 @@ export function RendaFixaPage() {
         </div>
       </div>
 
-      {/* Cards de Métricas Principais em Tons de Azul Claro */}
+      {/* Cards de Métricas Principais (Sempre pegando o saldo final e rendimento do mês atual) */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {/* Patrimônio Total em Renda Fixa */}
+        {/* Patrimônio em Renda Fixa (Saldo Final do Mês) */}
         <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-surface to-primary/5 p-5 shadow-subtle">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -281,23 +308,23 @@ export function RendaFixaPage() {
           </div>
           <div className="mt-3">
             <p className="num text-2xl font-bold text-foreground">
-              {formatCurrency(fixedStats.totalGross)}
+              {formatCurrency(spreadsheetMetrics.totalPatrimonioRF)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Líquido estimado: <span className="font-semibold text-foreground">{formatCurrency(fixedStats.totalNet)}</span>
+              Saldo Final ({spreadsheetMetrics.refMonth}): Investimentos + CNPJ
             </p>
           </div>
         </div>
 
-        {/* Lucro Acumulado */}
+        {/* Rendimento do Mês Atual */}
         <div className="rounded-2xl border border-border/80 bg-surface p-5 shadow-subtle">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Lucro Total Acumulado
+              Rendimento do Mês ({monthLabel(currentYM)})
             </span>
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-lg ${
-                fixedStats.totalProfit >= 0
+                spreadsheetMetrics.currentMonthTotalYield >= 0
                   ? "bg-emerald-500/15 text-emerald-400"
                   : "bg-destructive/15 text-destructive"
               }`}
@@ -308,36 +335,39 @@ export function RendaFixaPage() {
           <div className="mt-3">
             <p
               className={`num text-2xl font-bold ${
-                fixedStats.totalProfit >= 0 ? "text-emerald-400" : "text-destructive"
+                spreadsheetMetrics.currentMonthTotalYield >= 0
+                  ? "text-emerald-400"
+                  : "text-destructive"
               }`}
             >
-              {formatCurrency(fixedStats.totalProfit)}
+              {formatCurrency(spreadsheetMetrics.currentMonthTotalYield)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Rentabilidade Global:{" "}
-              <span className="font-semibold text-foreground">
-                {formatPercent(fixedStats.totalProfitPercent)}
-              </span>
+              Investimentos + Saldo Conta Dia a Dia
             </p>
           </div>
         </div>
 
-        {/* Total de Contas e Aplicações */}
+        {/* Lucro Total do Ano */}
         <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 shadow-glow/30">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-              Ano {selectedYear} Selecionado
+              Rendimento Total ({selectedYear})
             </span>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <FileSpreadsheet className="h-4 w-4" />
+              <Coins className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-3">
-            <p className="num text-xl font-bold text-foreground">
-              2 Planilhas Ativas
+            <p
+              className={`num text-2xl font-bold ${
+                spreadsheetMetrics.totalYearProfit >= 0 ? "text-emerald-400" : "text-destructive"
+              }`}
+            >
+              {formatCurrency(spreadsheetMetrics.totalYearProfit)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Investimentos + Saldo Conta Dia a Dia e CNPJ
+              Consolidado dos 12 meses do ano
             </p>
           </div>
         </div>
@@ -373,13 +403,28 @@ export function RendaFixaPage() {
         {/* ABA 1: MODELO DE PLANILHAS (INVESTIMENTOS & SALDO CONTA DIA A DIA E CNPJ) */}
         {/* ========================================================================= */}
         <TabsContent value="spreadsheets" className="space-y-8 focus-visible:outline-none">
+          {/* BARRA RESUMO HORIZONTAL: JAN A DEZ + TOTAL ANUAL (EXATAMENTE COMO NA IMAGEM) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-extrabold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-4 w-4 text-emerald-400" />
+                Resumo de Rendimento Mensal ({selectedYear})
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                Soma Investimentos + Conta Dia a Dia / CNPJ
+              </span>
+            </div>
+
+            <AnnualMonthlyYieldBar year={selectedYear} snapshots={snapshots} />
+          </div>
+
           {/* TABELA 1: INVESTIMENTOS */}
           <div className="space-y-2">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-primary" />
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Planilha 1 · Aplicações Financeiras
+                  Planilha 1 · Investimentos em Renda Fixa
                 </span>
               </div>
               <span className="text-[11px] text-muted-foreground font-mono">
@@ -392,17 +437,18 @@ export function RendaFixaPage() {
               year={selectedYear}
               snapshots={snapshots}
               investmentId={null}
+              allowEditProfit={false}
               onSnapshotSaved={() => refetchSnapshots()}
             />
           </div>
 
-          {/* TABELA 2: SALDO CONTA DIA A DIA E CNPJ */}
-          <div className="space-y-2 pt-4">
+          {/* TABELA 2: SALDO CONTA DIA A DIA E CNPJ (LUCRO MÊS EDITÁVEL) */}
+          <div className="space-y-2 pt-2">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Planilha 2 · Saldo Caixa / PJ / CNPJ
+                  Planilha 2 · Saldo Conta Dia a Dia e CNPJ (Lucro Mês Editável)
                 </span>
               </div>
               <span className="text-[11px] text-muted-foreground font-mono">
@@ -415,6 +461,7 @@ export function RendaFixaPage() {
               year={selectedYear}
               snapshots={snapshots}
               investmentId={cnpjAccountId ?? cnpjAccount?.id ?? null}
+              allowEditProfit={true}
               onSnapshotSaved={() => refetchSnapshots()}
             />
           </div>
