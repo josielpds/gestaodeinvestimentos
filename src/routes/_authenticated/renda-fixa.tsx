@@ -1,8 +1,9 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import {
   ArrowDownRight,
   ArrowUpRight,
+  Building2,
   Calendar,
   CalendarDays,
   CheckCircle2,
@@ -17,6 +18,7 @@ import {
   Plus,
   Receipt,
   Sparkles,
+  TableProperties,
   Trash2,
   TrendingUp,
   Wallet,
@@ -47,7 +49,8 @@ import { InvestmentDialog } from "@/components/investment-dialog";
 import { TransactionDialog } from "@/components/transaction-dialog";
 import { RendaFixaSnapshotDialog } from "@/components/renda-fixa-snapshot-dialog";
 import { DailyYieldView } from "@/components/daily-yield-view";
-import { useDeleteRow, useInvestments, useSnapshots, useTransactions } from "@/lib/data";
+import { AnnualSpreadsheetTable } from "@/components/annual-spreadsheet-table";
+import { useDeleteRow, useInvestments, useSaveRow, useSnapshots, useTransactions } from "@/lib/data";
 import {
   INDEXER_LABELS,
   SUBTYPE_LABELS,
@@ -68,17 +71,71 @@ export const Route = createFileRoute("/_authenticated/renda-fixa")({
   component: RendaFixaPage,
 });
 
-function RendaFixaPage() {
-  const { data: investments = [], isLoading: loadingInvestments } = useInvestments();
-  const { data: snapshots = [], isLoading: loadingSnapshots } = useSnapshots();
+export function RendaFixaPage() {
+  const { data: investments = [], isLoading: loadingInvestments, refetch: refetchInvestments } = useInvestments();
+  const { data: snapshots = [], isLoading: loadingSnapshots, refetch: refetchSnapshots } = useSnapshots();
   const { data: transactions = [] } = useTransactions();
   const deleteInv = useDeleteRow("investments");
-  const deleteSnapshot = useDeleteRow("monthly_snapshots");
+  const saveInv = useSaveRow("investments");
+
+  // Ano de referência selecionado para as planilhas
+  const currentYear = new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState<number>(currentYear);
 
   // Filtra apenas ativos de renda fixa
   const fixedInvestments = useMemo(() => {
     return investments.filter((i) => i.category === "renda_fixa");
   }, [investments]);
+
+  // Identifica ou define o ativo de Saldo Conta Dia a Dia / CNPJ
+  const cnpjAccount = useMemo(() => {
+    return fixedInvestments.find(
+      (i) =>
+        i.name.toLowerCase().includes("cnpj") ||
+        i.name.toLowerCase().includes("conta dia a dia") ||
+        i.institution.toLowerCase().includes("cnpj") ||
+        i.notes?.toLowerCase().includes("cnpj"),
+    );
+  }, [fixedInvestments]);
+
+  // Se o usuário ainda não tiver a conta CNPJ criada, criamos silenciosamente quando necessário
+  const [cnpjAccountId, setCnpjAccountId] = useState<string | null>(cnpjAccount?.id ?? null);
+
+  useEffect(() => {
+    if (cnpjAccount) {
+      setCnpjAccountId(cnpjAccount.id);
+    }
+  }, [cnpjAccount]);
+
+  // Auto-criação da conta CNPJ caso necessário para vincular snapshots da segunda tabela
+  async function ensureCnpjAccount(): Promise<string | null> {
+    if (cnpjAccountId) return cnpjAccountId;
+    if (cnpjAccount) return cnpjAccount.id;
+
+    try {
+      const res = await saveInv.mutateAsync({
+        values: {
+          name: "Saldo Conta Dia a Dia e CNPJ",
+          category: "renda_fixa",
+          sub_type: "poupanca",
+          institution: "Conta Caixa / PJ",
+          indexer: "cdi",
+          contract_rate: "100% CDI",
+          start_date: todayISO(),
+          liquidity: "Diária",
+          initial_amount: 0,
+          current_balance: 0,
+          status: "ativo",
+          tax_exempt: false,
+          notes: "Conta para registro de saldo dia a dia e CNPJ",
+        },
+      });
+      await refetchInvestments();
+      return null;
+    } catch {
+      return null;
+    }
+  }
 
   // Totais agregados da Renda Fixa
   const fixedStats = useMemo(() => {
@@ -106,12 +163,7 @@ function RendaFixaPage() {
       totalProfitPercent,
       count: fixedInvestments.filter((i) => i.status === "ativo").length,
     };
-  }, [fixedInvestments]);
-
-  // Snapshots de renda fixa (todos ou os gerais) ordenados do mais recente para o mais antigo
-  const sortedSnapshots = useMemo(() => {
-    return [...snapshots].sort((a, b) => b.year_month.localeCompare(a.year_month));
-  }, [snapshots]);
+  }, [fixedInvestments, transactions]);
 
   // Modais de controle
   const [snapshotDialogOpen, setSnapshotDialogOpen] = useState(false);
@@ -124,9 +176,7 @@ function RendaFixaPage() {
   const [txTargetInvId, setTxTargetInvId] = useState<string | null>(null);
 
   const [deleteInvId, setDeleteInvId] = useState<string | null>(null);
-  const [deleteSnapshotId, setDeleteSnapshotId] = useState<string | null>(null);
-
-  const [activeTab, setActiveTab] = useState<string>("snapshots");
+  const [activeTab, setActiveTab] = useState<string>("spreadsheets");
   const [searchAsset, setSearchAsset] = useState("");
 
   const filteredAssets = useMemo(() => {
@@ -146,25 +196,14 @@ function RendaFixaPage() {
       await deleteInv.mutateAsync(deleteInvId);
       toast.success("Ativo de renda fixa removido com sucesso.");
       setDeleteInvId(null);
-    } catch (e) {
+    } catch {
       toast.error("Erro ao excluir ativo.");
-    }
-  }
-
-  async function handleDeleteSnapshot() {
-    if (!deleteSnapshotId) return;
-    try {
-      await deleteSnapshot.mutateAsync(deleteSnapshotId);
-      toast.success("Registro de fechamento removido.");
-      setDeleteSnapshotId(null);
-    } catch (e) {
-      toast.error("Erro ao excluir fechamento.");
     }
   }
 
   return (
     <div className="space-y-6">
-      {/* Header Principal da Aba de Renda Fixa */}
+      {/* Header Principal da Renda Fixa */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2.5">
@@ -173,49 +212,68 @@ function RendaFixaPage() {
             </div>
             <div>
               <h1 className="font-display text-2xl font-bold tracking-tight text-foreground">
-                Renda Fixa
+                Renda Fixa & Contas
               </h1>
               <p className="text-xs text-muted-foreground">
-                Acompanhamento mensal com Saldo Inicial, Aportes e Saldo Final, cálculo de rendimento dia a dia (DU/252) e ativos.
+                Planilhas anuais com Capital Inicial, Capital Atual, Lucro Mês (R$) e Lucro % para Investimentos e Contas CNPJ.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Botão de Registro Mensal */}
-          <Button
-            onClick={() => {
-              setSelectedSnapshot(null);
-              setSnapshotDialogOpen(true);
-            }}
-            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-glow"
-          >
-            <Calendar className="mr-2 h-4 w-4" />
-            Registrar Fechamento do Mês
-          </Button>
+        {/* Seletor de Ano & Ações */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Seletor de Ano */}
+          <div className="flex items-center gap-1.5 bg-surface border border-border px-3 py-1 rounded-xl text-xs">
+            <Calendar className="h-3.5 w-3.5 text-primary" />
+            <span className="font-semibold text-muted-foreground">Ano:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              className="bg-transparent font-bold text-foreground focus:outline-none cursor-pointer"
+            >
+              <option value={currentYear}>{currentYear}</option>
+              <option value={currentYear - 1}>{currentYear - 1}</option>
+              <option value={currentYear - 2}>{currentYear - 2}</option>
+              <option value={currentYear + 1}>{currentYear + 1}</option>
+            </select>
+          </div>
 
           {/* Botão Novo Ativo de RF */}
           <Button
+            size="sm"
             variant="outline"
             onClick={() => {
               setSelectedInvestment(null);
               setInvestmentDialogOpen(true);
             }}
           >
-            <Plus className="mr-2 h-4 w-4" />
-            Novo Ativo de RF
+            <Plus className="mr-1.5 h-3.5 w-3.5" />
+            Novo Título / Conta
+          </Button>
+
+          {/* Botão de Registro Detalhado */}
+          <Button
+            size="sm"
+            onClick={() => {
+              setSelectedSnapshot(null);
+              setSnapshotDialogOpen(true);
+            }}
+            className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold shadow-glow text-xs"
+          >
+            <CalendarDays className="mr-1.5 h-3.5 w-3.5" />
+            Registrar Fechamento
           </Button>
         </div>
       </div>
 
       {/* Cards de Métricas Principais em Tons de Azul Claro */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {/* Patrimônio em Renda Fixa */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Patrimônio Total em Renda Fixa */}
         <div className="rounded-2xl border border-primary/20 bg-gradient-to-br from-surface to-primary/5 p-5 shadow-subtle">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Patrimônio em RF
+              Patrimônio em Renda Fixa
             </span>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
               <Landmark className="h-4 w-4" />
@@ -231,36 +289,16 @@ function RendaFixaPage() {
           </div>
         </div>
 
-        {/* Total Aportado */}
+        {/* Lucro Acumulado */}
         <div className="rounded-2xl border border-border/80 bg-surface p-5 shadow-subtle">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Total Aportado (Base)
-            </span>
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-              <Wallet className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <p className="num text-2xl font-bold text-foreground">
-              {formatCurrency(fixedStats.totalInvested)}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {fixedStats.count} ativo(s) ativo(s) na carteira
-            </p>
-          </div>
-        </div>
-
-        {/* Rendimento Total Acumulado */}
-        <div className="rounded-2xl border border-border/80 bg-surface p-5 shadow-subtle">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Rendimento Acumulado
+              Lucro Total Acumulado
             </span>
             <div
               className={`flex h-8 w-8 items-center justify-center rounded-lg ${
                 fixedStats.totalProfit >= 0
-                  ? "bg-success/15 text-success"
+                  ? "bg-emerald-500/15 text-emerald-400"
                   : "bg-destructive/15 text-destructive"
               }`}
             >
@@ -270,13 +308,13 @@ function RendaFixaPage() {
           <div className="mt-3">
             <p
               className={`num text-2xl font-bold ${
-                fixedStats.totalProfit >= 0 ? "text-success" : "text-destructive"
+                fixedStats.totalProfit >= 0 ? "text-emerald-400" : "text-destructive"
               }`}
             >
               {formatCurrency(fixedStats.totalProfit)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Rentabilidade:{" "}
+              Rentabilidade Global:{" "}
               <span className="font-semibold text-foreground">
                 {formatPercent(fixedStats.totalProfitPercent)}
               </span>
@@ -284,62 +322,43 @@ function RendaFixaPage() {
           </div>
         </div>
 
-        {/* Último Mês Registrado */}
+        {/* Total de Contas e Aplicações */}
         <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 shadow-glow/30">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-              Último Fechamento
+              Ano {selectedYear} Selecionado
             </span>
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <CalendarDays className="h-4 w-4" />
+              <FileSpreadsheet className="h-4 w-4" />
             </div>
           </div>
           <div className="mt-3">
-            {sortedSnapshots.length > 0 && sortedSnapshots[0] ? (
-              <>
-                <p className="num text-xl font-bold text-foreground">
-                  {sortedSnapshots[0].year_month}
-                </p>
-                <div className="mt-1 flex items-center gap-2 text-xs">
-                  <span className="text-muted-foreground">Lucro mês:</span>
-                  <span
-                    className={`font-bold ${
-                      sortedSnapshots[0].profit_amount >= 0 ? "text-success" : "text-destructive"
-                    }`}
-                  >
-                    {formatCurrency(sortedSnapshots[0].profit_amount)} (
-                    {formatPercent(sortedSnapshots[0].profit_percent)})
-                  </span>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm font-medium text-foreground">Nenhum mês fechado</p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Clique em &quot;Registrar Fechamento&quot;
-                </p>
-              </>
-            )}
+            <p className="num text-xl font-bold text-foreground">
+              2 Planilhas Ativas
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Investimentos + Saldo Conta Dia a Dia e CNPJ
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Abas Secundárias de Conteúdo */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      {/* Abas Principais de Navegação */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="bg-surface border border-border p-1">
           <TabsTrigger
-            value="snapshots"
+            value="spreadsheets"
             className="flex items-center gap-2 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
           >
-            <Calendar className="h-3.5 w-3.5" />
-            Fechamento Mensal (Saldos & Aportes)
+            <FileSpreadsheet className="h-3.5 w-3.5" />
+            Planilhas Anuais (Investimentos & CNPJ)
           </TabsTrigger>
           <TabsTrigger
             value="assets"
             className="flex items-center gap-2 text-xs data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
           >
             <Landmark className="h-3.5 w-3.5" />
-            Ativos de Renda Fixa ({fixedInvestments.length})
+            Títulos & Contas Cadastradas ({fixedInvestments.length})
           </TabsTrigger>
           <TabsTrigger
             value="daily"
@@ -350,167 +369,75 @@ function RendaFixaPage() {
           </TabsTrigger>
         </TabsList>
 
-        {/* ABA 1: HISTÓRICO DE FECHAMENTO MENSAL (SALDOS & APORTES) */}
-        <TabsContent value="snapshots" className="space-y-4">
-          <div className="rounded-2xl border border-border bg-card p-5 shadow-subtle space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="font-display text-base font-bold text-foreground">
-                  Histórico de Fechamentos Mensais
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Registro simplificado do Saldo Inicial, Aportes no mês, Resgates e Saldo Final com cálculo do rendimento líquido real.
-                </p>
+        {/* ========================================================================= */}
+        {/* ABA 1: MODELO DE PLANILHAS (INVESTIMENTOS & SALDO CONTA DIA A DIA E CNPJ) */}
+        {/* ========================================================================= */}
+        <TabsContent value="spreadsheets" className="space-y-8 focus-visible:outline-none">
+          {/* TABELA 1: INVESTIMENTOS */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-primary" />
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  Planilha 1 · Aplicações Financeiras
+                </span>
               </div>
-
-              <Button
-                size="sm"
-                onClick={() => {
-                  setSelectedSnapshot(null);
-                  setSnapshotDialogOpen(true);
-                }}
-                className="bg-primary text-primary-foreground hover:bg-primary/90 text-xs font-semibold"
-              >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Novo Registro Mensal
-              </Button>
+              <span className="text-[11px] text-muted-foreground font-mono">
+                Ano: {selectedYear}
+              </span>
             </div>
 
-            {sortedSnapshots.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-border py-12 text-center">
-                <Calendar className="mx-auto h-10 w-10 text-muted-foreground/60" />
-                <p className="mt-3 text-sm font-semibold text-foreground">
-                  Nenhum fechamento mensal registrado ainda
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground max-w-md mx-auto">
-                  Para acompanhar o rendimento real da sua Renda Fixa mês a mês, informe o saldo no início e no fim de cada mês junto com os aportes realizados.
-                </p>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setSelectedSnapshot(null);
-                    setSnapshotDialogOpen(true);
-                  }}
-                  className="mt-4 bg-primary text-primary-foreground"
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Registrar Primeiro Mês
-                </Button>
+            <AnnualSpreadsheetTable
+              title="INVESTIMENTOS"
+              year={selectedYear}
+              snapshots={snapshots}
+              investmentId={null}
+              onSnapshotSaved={() => refetchSnapshots()}
+            />
+          </div>
+
+          {/* TABELA 2: SALDO CONTA DIA A DIA E CNPJ */}
+          <div className="space-y-2 pt-4">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
+                <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  Planilha 2 · Saldo Caixa / PJ / CNPJ
+                </span>
               </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-border bg-surface text-muted-foreground">
-                      <th className="py-3 px-4 font-semibold">Mês / Ano</th>
-                      <th className="py-3 px-4 font-semibold text-right">Saldo Inicial (1º dia)</th>
-                      <th className="py-3 px-4 font-semibold text-right">Aportes no Mês</th>
-                      <th className="py-3 px-4 font-semibold text-right">Resgates</th>
-                      <th className="py-3 px-4 font-semibold text-right">Saldo Final (Último dia)</th>
-                      <th className="py-3 px-4 font-semibold text-right">Rendimento (R$)</th>
-                      <th className="py-3 px-4 font-semibold text-right">Rentabilidade (%)</th>
-                      <th className="py-3 px-4 font-semibold text-center">Benchmark CDI</th>
-                      <th className="py-3 px-4 text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {sortedSnapshots.map((sn) => {
-                      const isPositive = sn.profit_amount >= 0;
-                      return (
-                        <tr key={sn.id} className="hover:bg-accent/40 transition-colors">
-                          <td className="py-3.5 px-4 font-bold text-foreground">
-                            <div className="flex items-center gap-2">
-                              <Calendar className="h-4 w-4 text-primary" />
-                              <span className="font-mono text-sm">{sn.year_month}</span>
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-4 text-right num text-muted-foreground">
-                            {formatCurrency(sn.initial_balance)}
-                          </td>
-                          <td className="py-3.5 px-4 text-right num font-semibold text-primary">
-                            {sn.deposits > 0 ? `+ ${formatCurrency(sn.deposits)}` : "—"}
-                          </td>
-                          <td className="py-3.5 px-4 text-right num text-muted-foreground">
-                            {sn.withdrawals > 0 ? `- ${formatCurrency(sn.withdrawals)}` : "—"}
-                          </td>
-                          <td className="py-3.5 px-4 text-right num font-bold text-foreground">
-                            {formatCurrency(sn.final_balance)}
-                          </td>
-                          <td
-                            className={`py-3.5 px-4 text-right num font-bold ${
-                              isPositive ? "text-success" : "text-destructive"
-                            }`}
-                          >
-                            <div className="flex items-center justify-end gap-1">
-                              {isPositive ? (
-                                <ArrowUpRight className="h-3.5 w-3.5" />
-                              ) : (
-                                <ArrowDownRight className="h-3.5 w-3.5" />
-                              )}
-                              {formatCurrency(sn.profit_amount)}
-                            </div>
-                          </td>
-                          <td
-                            className={`py-3.5 px-4 text-right num font-bold ${
-                              isPositive ? "text-success" : "text-destructive"
-                            }`}
-                          >
-                            {formatPercent(sn.profit_percent)}
-                          </td>
-                          <td className="py-3.5 px-4 text-center">
-                            <Badge variant="outline" className="text-[10px] bg-surface">
-                              CDI: {formatPercent(sn.cdi_benchmark)}
-                            </Badge>
-                          </td>
-                          <td className="py-3.5 px-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-muted-foreground hover:text-foreground"
-                                onClick={() => {
-                                  setSelectedSnapshot(sn);
-                                  setSnapshotDialogOpen(true);
-                                }}
-                              >
-                                <Edit2 className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7 text-destructive/80 hover:text-destructive hover:bg-destructive/10"
-                                onClick={() => setDeleteSnapshotId(sn.id)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
+              <span className="text-[11px] text-muted-foreground font-mono">
+                Ano: {selectedYear}
+              </span>
+            </div>
+
+            <AnnualSpreadsheetTable
+              title="SALDO CONTA DIA A DIA E CNPJ"
+              year={selectedYear}
+              snapshots={snapshots}
+              investmentId={cnpjAccountId ?? cnpjAccount?.id ?? null}
+              onSnapshotSaved={() => refetchSnapshots()}
+            />
           </div>
         </TabsContent>
 
-        {/* ABA 2: ATIVOS DE RENDA FIXA */}
-        <TabsContent value="assets" className="space-y-4">
+        {/* ========================================================================= */}
+        {/* ABA 2: ATIVOS & TÍTULOS DE RENDA FIXA */}
+        {/* ========================================================================= */}
+        <TabsContent value="assets" className="space-y-4 focus-visible:outline-none">
           <div className="rounded-2xl border border-border bg-card p-5 shadow-subtle space-y-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="font-display text-base font-bold text-foreground">
-                  Meus Ativos de Renda Fixa
+                  Títulos e Contas de Renda Fixa
                 </h3>
                 <p className="text-xs text-muted-foreground">
-                  CDBs, LCIs, LCAs, Tesouro Direto, Debêntures e outros títulos cadastrados.
+                  CDBs, LCIs, LCAs, Tesouro Direto, Debêntures e Contas remuneradas cadastradas.
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
                 <Input
-                  placeholder="Buscar ativo ou emissor..."
+                  placeholder="Buscar título ou banco..."
                   value={searchAsset}
                   onChange={(e) => setSearchAsset(e.target.value)}
                   className="h-8 w-48 text-xs"
@@ -524,7 +451,7 @@ function RendaFixaPage() {
                   className="bg-primary text-primary-foreground hover:bg-primary/90 text-xs"
                 >
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Novo Ativo
+                  Novo Título
                 </Button>
               </div>
             </div>
@@ -538,17 +465,6 @@ function RendaFixaPage() {
                 <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
                   Cadastre seus títulos de CDB, Tesouro Direto, LCI/LCA para acompanhar a rentabilidade diária e vencimento.
                 </p>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setSelectedInvestment(null);
-                    setInvestmentDialogOpen(true);
-                  }}
-                  className="mt-4 bg-primary text-primary-foreground"
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  Adicionar Título de Renda Fixa
-                </Button>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -567,8 +483,7 @@ function RendaFixaPage() {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {filteredAssets.map((inv) => {
-                      const m = metricsFor(inv);
-                      const isExpired = inv.due_date && inv.due_date < todayISO();
+                      const m = metricsFor(inv, transactions);
                       const daysLeft = inv.due_date ? daysBetween(todayISO(), inv.due_date) : null;
 
                       return (
@@ -581,7 +496,7 @@ function RendaFixaPage() {
                                   {SUBTYPE_LABELS[inv.sub_type] ?? inv.sub_type.toUpperCase()}
                                 </Badge>
                                 {inv.tax_exempt ? (
-                                  <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/30">
+                                  <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
                                     Isento IR
                                   </Badge>
                                 ) : null}
@@ -615,7 +530,7 @@ function RendaFixaPage() {
                           </td>
                           <td
                             className={`py-3.5 px-4 text-right num font-semibold ${
-                              m.grossProfit >= 0 ? "text-success" : "text-destructive"
+                              m.grossProfit >= 0 ? "text-emerald-400" : "text-destructive"
                             }`}
                           >
                             <div>
@@ -677,8 +592,10 @@ function RendaFixaPage() {
           </div>
         </TabsContent>
 
+        {/* ========================================================================= */}
         {/* ABA 3: RENDIMENTO DIÁRIO & CALENDÁRIO (DU/252 + FERIADOS) */}
-        <TabsContent value="daily" className="space-y-4">
+        {/* ========================================================================= */}
+        <TabsContent value="daily" className="space-y-4 focus-visible:outline-none">
           <DailyYieldView />
         </TabsContent>
       </Tabs>
@@ -705,6 +622,7 @@ function RendaFixaPage() {
       <TransactionDialog
         open={txDialogOpen}
         onOpenChange={setTxDialogOpen}
+        investments={investments}
         defaultInvestmentId={txTargetInvId ?? undefined}
       />
 
@@ -724,27 +642,6 @@ function RendaFixaPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* CONFIRMAÇÃO EXCLUSÃO SNAPSHOT */}
-      <AlertDialog open={!!deleteSnapshotId} onOpenChange={(open) => !open && setDeleteSnapshotId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Fechamento Mensal?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja remover o registro deste mês? Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteSnapshot}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Excluir Registro
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
