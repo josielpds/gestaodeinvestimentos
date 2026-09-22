@@ -318,7 +318,7 @@ export function RendaFixaPage() {
             year={selectedYear}
             snapshots={snapshots}
             investmentId={null}
-            allowEditProfit={false}
+            maxEditableProfitMonth={8}
             onSaveRowCustom={async ({ yearMonth, snapshotId, initial, final, profit, percent }) => {
               await saveSnapshot.mutateAsync({
                 id: snapshotId,

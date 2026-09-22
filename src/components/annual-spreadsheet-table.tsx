@@ -27,7 +27,8 @@ interface AnnualSpreadsheetProps {
   year: number;
   snapshots: Snapshot[];
   investmentId?: string | null;
-  allowEditProfit?: boolean;
+  allowEditProfit?: boolean | number | ((monthNum: number, yearMonth: string) => boolean);
+  maxEditableProfitMonth?: number;
   accentColor?: "blue" | "emerald";
   onSnapshotSaved?: () => void;
   onSaveRowCustom?: (data: {
@@ -42,6 +43,7 @@ interface AnnualSpreadsheetProps {
 
 interface MonthRowData {
   yearMonth: string;
+  monthNum: number;
   monthName: string;
   snapshotId: string | null;
   initialBalance: number;
@@ -57,12 +59,31 @@ export function AnnualSpreadsheetTable({
   snapshots,
   investmentId = null,
   allowEditProfit = false,
+  maxEditableProfitMonth,
   accentColor = "blue",
   onSnapshotSaved,
   onSaveRowCustom,
 }: AnnualSpreadsheetProps) {
   const saveSnapshot = useSaveRow("monthly_snapshots");
   const deleteSnapshot = useDeleteRow("monthly_snapshots");
+
+  // Verifica se o lucro do mês específico pode ser editado manualmente
+  const isMonthProfitEditable = (monthNum: number | string, yearMonth: string): boolean => {
+    const num = typeof monthNum === "string" ? parseInt(monthNum, 10) : monthNum;
+    if (typeof maxEditableProfitMonth === "number") {
+      return num <= maxEditableProfitMonth;
+    }
+    if (typeof allowEditProfit === "function") {
+      return allowEditProfit(num, yearMonth);
+    }
+    if (typeof allowEditProfit === "number") {
+      return num <= allowEditProfit;
+    }
+    if (typeof allowEditProfit === "boolean") {
+      return allowEditProfit;
+    }
+    return false;
+  };
 
   // Estado dos valores em edição por mês: { "2026-01": { initial: "1000", final: "1100", profit: "100", isDirty: false } }
   const [editingRows, setEditingRows] = useState<
@@ -74,6 +95,7 @@ export function AnnualSpreadsheetTable({
   const rows: MonthRowData[] = useMemo(() => {
     return MONTHS.map((m) => {
       const yearMonth = `${year}-${m.num}`;
+      const monthNum = parseInt(m.num, 10);
       // Encontra snapshot correspondente ao mês e ao investmentId
       const found = snapshots.find((s) => {
         const matchYM = s.year_month === yearMonth;
@@ -99,6 +121,7 @@ export function AnnualSpreadsheetTable({
 
         return {
           yearMonth,
+          monthNum,
           monthName: m.name,
           snapshotId: found.id,
           initialBalance: initial,
@@ -111,6 +134,7 @@ export function AnnualSpreadsheetTable({
 
       return {
         yearMonth,
+        monthNum,
         monthName: m.name,
         snapshotId: null,
         initialBalance: 0,
@@ -186,6 +210,9 @@ export function AnnualSpreadsheetTable({
     field: "initial" | "final" | "profit",
     value: string,
   ) {
+    const monthNum = parseInt(yearMonth.split("-")[1] || "1", 10);
+    const isProfitEditable = isMonthProfitEditable(monthNum, yearMonth);
+
     setEditingRows((prev) => {
       const current = prev[yearMonth] || { initial: "", final: "", profit: "", isDirty: false };
       const updated = {
@@ -194,8 +221,8 @@ export function AnnualSpreadsheetTable({
         isDirty: true,
       };
 
-      // Se não for edição manual de lucro e o usuário mudou initial ou final, atualiza profit automaticamente
-      if (!allowEditProfit && (field === "initial" || field === "final")) {
+      // Se não for edição manual de lucro neste mês e o usuário mudou initial ou final, atualiza profit automaticamente
+      if (!isProfitEditable && (field === "initial" || field === "final")) {
         const iVal = field === "initial" ? parseFloat(value.replace(",", ".")) || 0 : parseFloat(current.initial.replace(",", ".")) || 0;
         const fVal = field === "final" ? parseFloat(value.replace(",", ".")) || 0 : parseFloat(current.final.replace(",", ".")) || 0;
         updated.profit = String(fVal - iVal);
@@ -212,9 +239,12 @@ export function AnnualSpreadsheetTable({
     const edit = editingRows[yearMonth];
     if (!edit) return;
 
+    const monthNum = parseInt(yearMonth.split("-")[1] || "1", 10);
+    const isProfitEditable = isMonthProfitEditable(monthNum, yearMonth);
+
     const initial = parseFloat(edit.initial.replace(",", ".")) || 0;
     const final = parseFloat(edit.final.replace(",", ".")) || 0;
-    const profit = edit.profit !== ""
+    const profit = isProfitEditable && edit.profit !== ""
       ? parseFloat(edit.profit.replace(",", ".")) || 0
       : final - initial;
     const percent = initial > 0 ? (profit / initial) * 100 : 0;
@@ -308,8 +338,11 @@ export function AnnualSpreadsheetTable({
               const edit = editingRows[row.yearMonth] || {
                 initial: "",
                 final: "",
+                profit: "",
                 isDirty: false,
               };
+
+              const isProfitEditable = isMonthProfitEditable(row.monthNum, row.yearMonth);
 
               // Valores calculados dinamicamente com base no input em tempo real
               const currentInitial = edit.isDirty
@@ -319,11 +352,18 @@ export function AnnualSpreadsheetTable({
                 ? parseFloat(edit.final.replace(",", ".")) || 0
                 : row.finalBalance;
 
-              const liveProfit = currentFinal - currentInitial;
+              const liveProfit = isProfitEditable && edit.profit !== ""
+                ? parseFloat(edit.profit.replace(",", ".")) || 0
+                : edit.isDirty
+                  ? currentFinal - currentInitial
+                  : row.profitAmount !== 0
+                    ? row.profitAmount
+                    : currentFinal - currentInitial;
+
               const livePercent =
                 currentInitial > 0 ? (liveProfit / currentInitial) * 100 : 0;
 
-              const hasValue = currentInitial > 0 || currentFinal > 0;
+              const hasValue = currentInitial > 0 || currentFinal > 0 || (isProfitEditable && edit.profit !== "");
               const isPositive = liveProfit >= 0;
               const isSaving = savingMonth === row.yearMonth;
 
@@ -388,9 +428,9 @@ export function AnnualSpreadsheetTable({
                     </div>
                   </td>
 
-                  {/* Lucro Mês (R$) - Editável se allowEditProfit for true, ou calculado automaticamente */}
+                  {/* Lucro Mês (R$) - Editável se isProfitEditable for true, ou calculado automaticamente */}
                   <td className="py-2 px-3 text-right border-r border-border/60 font-mono font-bold">
-                    {allowEditProfit ? (
+                    {isProfitEditable ? (
                       <div className="relative flex items-center justify-end">
                         <span className="absolute left-2 text-[11px] text-muted-foreground font-mono">
                           R$
