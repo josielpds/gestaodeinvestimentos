@@ -30,6 +30,14 @@ interface AnnualSpreadsheetProps {
   allowEditProfit?: boolean;
   accentColor?: "blue" | "emerald";
   onSnapshotSaved?: () => void;
+  onSaveRowCustom?: (data: {
+    yearMonth: string;
+    snapshotId: string | null;
+    initial: number;
+    final: number;
+    profit: number;
+    percent: number;
+  }) => Promise<void>;
 }
 
 interface MonthRowData {
@@ -51,6 +59,7 @@ export function AnnualSpreadsheetTable({
   allowEditProfit = false,
   accentColor = "blue",
   onSnapshotSaved,
+  onSaveRowCustom,
 }: AnnualSpreadsheetProps) {
   const saveSnapshot = useSaveRow("monthly_snapshots");
   const deleteSnapshot = useDeleteRow("monthly_snapshots");
@@ -212,20 +221,31 @@ export function AnnualSpreadsheetTable({
 
     setSavingMonth(yearMonth);
     try {
-      await saveSnapshot.mutateAsync({
-        id: snapshotId,
-        values: {
-          year_month: yearMonth,
-          investment_id: investmentId,
-          initial_balance: initial,
-          deposits: 0,
-          withdrawals: 0,
-          earnings: profit > 0 ? profit : 0,
-          final_balance: final,
-          profit_amount: profit,
-          profit_percent: percent,
-        },
-      });
+      if (onSaveRowCustom) {
+        await onSaveRowCustom({
+          yearMonth,
+          snapshotId,
+          initial,
+          final,
+          profit,
+          percent,
+        });
+      } else {
+        await saveSnapshot.mutateAsync({
+          id: snapshotId,
+          values: {
+            year_month: yearMonth,
+            investment_id: investmentId,
+            initial_balance: initial,
+            deposits: 0,
+            withdrawals: 0,
+            earnings: profit > 0 ? profit : 0,
+            final_balance: final,
+            profit_amount: profit,
+            profit_percent: percent,
+          },
+        });
+      }
 
       setEditingRows((prev) => ({
         ...prev,

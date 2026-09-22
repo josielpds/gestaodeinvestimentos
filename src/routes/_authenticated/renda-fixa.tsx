@@ -80,6 +80,7 @@ export function RendaFixaPage() {
   const { data: transactions = [] } = useTransactions();
   const deleteInv = useDeleteRow("investments");
   const saveInv = useSaveRow("investments");
+  const saveSnapshot = useSaveRow("monthly_snapshots");
 
   // Ano de referência selecionado para as planilhas
   const currentYear = new Date().getFullYear();
@@ -102,14 +103,56 @@ export function RendaFixaPage() {
     );
   }, [fixedInvestments]);
 
-  // Se o usuário ainda não tiver a conta CNPJ criada, criamos silenciosamente quando necessário
+  // ID garantido da conta CNPJ / Dia a Dia
   const [cnpjAccountId, setCnpjAccountId] = useState<string | null>(cnpjAccount?.id ?? null);
 
   useEffect(() => {
-    if (cnpjAccount) {
+    if (cnpjAccount?.id) {
       setCnpjAccountId(cnpjAccount.id);
     }
   }, [cnpjAccount]);
+
+  // Garante a existência do registro de conta CNPJ / Dia a Dia para isolamento absoluto das planilhas
+  async function ensureCnpjAccountId(): Promise<string> {
+    if (cnpjAccountId) return cnpjAccountId;
+    if (cnpjAccount?.id) return cnpjAccount.id;
+
+    try {
+      await saveInv.mutateAsync({
+        values: {
+          name: "Saldo Conta Dia a Dia e CNPJ",
+          category: "renda_fixa",
+          sub_type: "conta_corrente",
+          institution: "Conta Dia a Dia / CNPJ",
+          current_balance: 0,
+          initial_amount: 0,
+          status: "ativo",
+          start_date: todayISO(),
+        },
+      });
+      const { data: updatedInvs } = await refetchInvestments();
+      const found = (updatedInvs || []).find(
+        (i) =>
+          i.name.toLowerCase().includes("cnpj") ||
+          i.name.toLowerCase().includes("conta dia a dia") ||
+          i.institution.toLowerCase().includes("cnpj"),
+      );
+      if (found) {
+        setCnpjAccountId(found.id);
+        return found.id;
+      }
+    } catch (err) {
+      console.error("Erro ao inicializar conta CNPJ:", err);
+    }
+    return "";
+  }
+
+  // Criação automática no primeiro carregamento caso ainda não exista
+  useEffect(() => {
+    if (!loadingInvestments && !cnpjAccount && !cnpjAccountId) {
+      ensureCnpjAccountId();
+    }
+  }, [loadingInvestments, cnpjAccount, cnpjAccountId]);
 
   // Totais agregados da Renda Fixa tradicional
   const fixedStats = useMemo(() => {
@@ -438,11 +481,28 @@ export function RendaFixaPage() {
               snapshots={snapshots}
               investmentId={null}
               allowEditProfit={false}
+              onSaveRowCustom={async ({ yearMonth, snapshotId, initial, final, profit, percent }) => {
+                await saveSnapshot.mutateAsync({
+                  id: snapshotId,
+                  values: {
+                    year_month: yearMonth,
+                    investment_id: null,
+                    initial_balance: initial,
+                    deposits: 0,
+                    withdrawals: 0,
+                    earnings: profit > 0 ? profit : 0,
+                    final_balance: final,
+                    profit_amount: profit,
+                    profit_percent: percent,
+                  },
+                });
+                refetchSnapshots();
+              }}
               onSnapshotSaved={() => refetchSnapshots()}
             />
           </div>
 
-          {/* TABELA 2: SALDO CONTA DIA A DIA E CNPJ (LUCRO MÊS EDITÁVEL) */}
+          {/* TABELA 2: SALDO CONTA DIA A DIA E CNPJ (LUCRO MÊS EDITÁVEL - 100% INDEPENDENTE) */}
           <div className="space-y-2 pt-2">
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-2">
@@ -460,9 +520,41 @@ export function RendaFixaPage() {
               title="SALDO CONTA DIA A DIA E CNPJ"
               year={selectedYear}
               snapshots={snapshots}
-              investmentId={cnpjAccountId ?? cnpjAccount?.id ?? null}
+              investmentId={cnpjAccountId || cnpjAccount?.id || "cnpj_guard"}
               allowEditProfit={true}
-              onSnapshotSaved={() => refetchSnapshots()}
+              onSaveRowCustom={async ({ yearMonth, snapshotId, initial, final, profit, percent }) => {
+                const accId = await ensureCnpjAccountId();
+                if (!accId) {
+                  throw new Error("Não foi possível identificar ou inicializar a Conta CNPJ.");
+                }
+                await saveSnapshot.mutateAsync({
+                  id: snapshotId,
+                  values: {
+                    year_month: yearMonth,
+                    investment_id: accId,
+                    initial_balance: initial,
+                    deposits: 0,
+                    withdrawals: 0,
+                    earnings: profit > 0 ? profit : 0,
+                    final_balance: final,
+                    profit_amount: profit,
+                    profit_percent: percent,
+                  },
+                });
+                // Sincroniza também o saldo do ativo CNPJ na tabela investments
+                await saveInv.mutateAsync({
+                  id: accId,
+                  values: {
+                    current_balance: final,
+                  },
+                });
+                refetchSnapshots();
+                refetchInvestments();
+              }}
+              onSnapshotSaved={() => {
+                refetchSnapshots();
+                refetchInvestments();
+              }}
             />
           </div>
         </TabsContent>

@@ -50,6 +50,7 @@ import {
   CATEGORY_LABELS,
   INDEXER_LABELS,
   SUBTYPE_LABELS,
+  currentYearMonth,
   daysBetween,
   formatCurrency,
   formatDate,
@@ -99,6 +100,38 @@ function DashboardPage() {
 
   // Resumo Específico Renda Fixa
   const rfSummary = summarizeCategory("renda_fixa", investments, transactions);
+
+  // Consolidação Dinâmica de Renda Fixa (Planilha 1 Investimentos + Planilha 2 Saldo Conta Dia a Dia / CNPJ)
+  const currentYM = currentYearMonth();
+  const rfSnapshots = snapshots.filter((s) => !s.investment_id || s.investment_id === "null");
+  const cnpjInvs = investments.filter(
+    (i) =>
+      i.name.toLowerCase().includes("cnpj") ||
+      i.name.toLowerCase().includes("conta dia a dia") ||
+      i.institution.toLowerCase().includes("cnpj"),
+  );
+  const cnpjIds = new Set(cnpjInvs.map((i) => i.id));
+  const cnpjSnapshots = snapshots.filter((s) => s.investment_id && cnpjIds.has(s.investment_id));
+
+  const latestRfSnap =
+    rfSnapshots.find((s) => s.year_month === currentYM) ??
+    [...rfSnapshots].sort((a, b) => b.year_month.localeCompare(a.year_month))[0];
+  const latestCnpjSnap =
+    cnpjSnapshots.find((s) => s.year_month === currentYM) ??
+    [...cnpjSnapshots].sort((a, b) => b.year_month.localeCompare(a.year_month))[0];
+
+  const rfSpreadsheetFinal = Number(latestRfSnap?.final_balance) || 0;
+  const cnpjSpreadsheetFinal = Number(latestCnpjSnap?.final_balance) || 0;
+  const totalSpreadsheetRF = rfSpreadsheetFinal + cnpjSpreadsheetFinal;
+
+  // Totais Efetivos de Renda Fixa e Consolidado
+  const effectiveRfGross = totalSpreadsheetRF > 0 ? totalSpreadsheetRF : rfSummary.totalGross;
+  const rfDifference = effectiveRfGross - rfSummary.totalGross;
+  const effectiveTotalGross = summary.totalGross + rfDifference;
+  const effectiveTotalNet = summary.totalNet + rfDifference;
+  const effectiveGrossProfit = summary.grossProfit + rfDifference;
+  const effectiveGrossProfitPercent =
+    summary.totalInvested > 0 ? (effectiveGrossProfit / summary.totalInvested) * 100 : summary.grossProfitPercent;
 
   // Projeção de Dias Úteis e Rendimento Diário de Renda Fixa (ANBIMA DU/252)
   const rfMonthProjection = calculateMonthProjection(rfSummary.items);
@@ -283,7 +316,7 @@ function DashboardPage() {
           <div className="flex items-center gap-3 text-xs text-muted-foreground self-end sm:self-auto">
             <span>Patrimônio Bruto Consolidado:</span>
             <span className="num text-sm font-bold text-foreground">
-              {formatCurrency(summary.totalGross)}
+              {formatCurrency(effectiveTotalGross)}
             </span>
           </div>
         </div>
@@ -296,17 +329,17 @@ function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               label="Patrimônio Líquido Total"
-              value={formatCurrency(summary.totalNet)}
-              hint={`Bruto total: ${formatCurrency(summary.totalGross)}`}
+              value={formatCurrency(effectiveTotalNet)}
+              hint={`Bruto total: ${formatCurrency(effectiveTotalGross)}`}
               icon={Wallet}
               tone="positive"
             />
             <StatCard
               label="Lucro Bruto Consolidado"
-              value={formatCurrency(summary.grossProfit)}
-              hint={`Rentabilidade: ${formatPercent(summary.grossProfitPercent)}`}
+              value={formatCurrency(effectiveGrossProfit)}
+              hint={`Rentabilidade: ${formatPercent(effectiveGrossProfitPercent)}`}
               icon={TrendingUp}
-              tone={summary.grossProfit >= 0 ? "positive" : "negative"}
+              tone={effectiveGrossProfit >= 0 ? "positive" : "negative"}
             />
             <StatCard
               label="Proventos em 2026"
@@ -340,14 +373,14 @@ function DashboardPage() {
                   <div>
                     <p className="text-xs font-semibold text-muted-foreground">Renda Fixa</p>
                     <p className="num text-lg font-bold text-foreground">
-                      {formatCurrency(rfSummary.totalGross)}
+                      {formatCurrency(effectiveRfGross)}
                     </p>
                   </div>
                 </div>
                 <div className="text-right">
                   <Badge variant="outline" className="text-xs border-chart-1/40 text-chart-1">
-                    {summary.totalGross > 0
-                      ? `${((rfSummary.totalGross / summary.totalGross) * 100).toFixed(1)}%`
+                    {effectiveTotalGross > 0
+                      ? `${((effectiveRfGross / effectiveTotalGross) * 100).toFixed(1)}%`
                       : "0%"}
                   </Badge>
                   <p className="text-[11px] text-muted-foreground mt-1">
@@ -357,8 +390,8 @@ function DashboardPage() {
               </div>
               <div className="mt-3 flex items-center justify-between text-xs pt-2 border-t border-border/60">
                 <span className="text-muted-foreground">Lucro acumulado:</span>
-                <span className={`num font-semibold ${rfSummary.grossProfit >= 0 ? "text-success" : "text-destructive"}`}>
-                  {formatCurrency(rfSummary.grossProfit)} ({formatPercent(rfSummary.grossProfitPercent)})
+                <span className={`num font-semibold ${effectiveGrossProfit >= 0 ? "text-success" : "text-destructive"}`}>
+                  {formatCurrency(rfSummary.grossProfit + rfDifference)}
                 </span>
               </div>
             </div>
@@ -700,17 +733,21 @@ function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               label="Patrimônio Líquido em Renda Fixa"
-              value={formatCurrency(rfSummary.totalNet)}
-              hint={`Bruto RF: ${formatCurrency(rfSummary.totalGross)}`}
+              value={formatCurrency(rfSummary.totalNet + rfDifference)}
+              hint={`Bruto RF: ${formatCurrency(effectiveRfGross)}`}
               icon={Landmark}
               tone="positive"
             />
             <StatCard
               label="Lucro Acumulado em Renda Fixa"
-              value={formatCurrency(rfSummary.grossProfit)}
-              hint={`Rentabilidade RF: ${formatPercent(rfSummary.grossProfitPercent)}`}
+              value={formatCurrency(rfSummary.grossProfit + rfDifference)}
+              hint={`Rentabilidade RF: ${formatPercent(
+                (rfSummary.totalInvested + rfDifference) > 0
+                  ? ((rfSummary.grossProfit + rfDifference) / (rfSummary.totalInvested + rfDifference)) * 100
+                  : rfSummary.grossProfitPercent,
+              )}`}
               icon={TrendingUp}
-              tone={rfSummary.grossProfit >= 0 ? "positive" : "negative"}
+              tone={(rfSummary.grossProfit + rfDifference) >= 0 ? "positive" : "negative"}
             />
             <StatCard
               label="Ativos Isentos de IR (LCI, LCA, CRI...)"
