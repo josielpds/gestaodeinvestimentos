@@ -225,24 +225,22 @@ export function metricsFor(inv: Investment, transactions: Transaction[] = []): I
   const daysHeld = Math.max(1, daysElapsed + 1);
   
   const isFixed = inv.category === "renda_fixa";
-  const isExempt = !!inv.tax_exempt;
+  const isExempt = !!inv.tax_exempt || isFixed;
 
-  // IOF (incide apenas em Renda Fixa não isenta para resgates/posições com menos de 30 dias)
-  const iofRate = iofTaxRate(daysElapsed, isExempt, isFixed);
+  // IOF (isento em Renda Fixa pois os saldos informados já são líquidos)
+  const iofRate = isFixed ? 0 : iofTaxRate(daysElapsed, isExempt, isFixed);
 
-  // IR (Renda Fixa segue a tabela regressiva por dias; Renda Variável segue alíquotas de mercado)
+  // IR (Renda Fixa não desconta IR pois os saldos já são líquidos)
   let irRate = 0;
-  if (isExempt) {
+  if (isExempt || isFixed) {
     irRate = 0;
-  } else if (isFixed) {
-    irRate = fixedIncomeTaxRate(daysElapsed, false);
   } else if (inv.category === "renda_variavel") {
     irRate = inv.sub_type === "fii" ? 0.20 : 0.15;
   } else {
     irRate = 0.15;
   }
 
-  // Lucro bruto
+  // Lucro bruto / líquido (para Renda Fixa os valores já são líquidos)
   const grossProfit = inv.current_balance - investedTotal;
   
   // 1. O IOF incide apenas sobre os rendimentos (o lucro)

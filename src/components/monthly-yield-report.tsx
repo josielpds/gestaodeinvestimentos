@@ -143,7 +143,8 @@ export function MonthlyYieldReport({
 
   // Cálculo consolidado de rendimento do mês
   const monthReportData = useMemo(() => {
-    const isConsolidated = !!snapshotForMonth;
+    const monthSnaps = snapshots.filter((s) => s.year_month === selectedMonth);
+    const isConsolidated = monthSnaps.length > 0;
     const isCurrentMonth = selectedMonth === currentYM;
 
     const txDeposits = monthTransactions
@@ -174,16 +175,16 @@ export function MonthlyYieldReport({
     let ipcaBenchmark = 0.40;
     let ibovespaBenchmark = 1.20;
 
-    if (snapshotForMonth) {
-      initialBalance = snapshotForMonth.initial_balance;
-      finalBalance = snapshotForMonth.final_balance;
-      deposits = snapshotForMonth.deposits;
-      withdrawals = snapshotForMonth.withdrawals;
-      profitAmount = snapshotForMonth.profit_amount;
-      profitPercent = snapshotForMonth.profit_percent;
-      cdiBenchmark = snapshotForMonth.cdi_benchmark || 0.95;
-      ipcaBenchmark = snapshotForMonth.ipca_benchmark || 0.40;
-      ibovespaBenchmark = snapshotForMonth.ibovespa_benchmark || 1.20;
+    if (monthSnaps.length > 0) {
+      initialBalance = monthSnaps.reduce((acc, s) => acc + (Number(s.initial_balance) || 0), 0);
+      finalBalance = monthSnaps.reduce((acc, s) => acc + (Number(s.final_balance) || 0), 0);
+      deposits = monthSnaps.reduce((acc, s) => acc + (Number(s.deposits) || 0), 0);
+      withdrawals = monthSnaps.reduce((acc, s) => acc + (Number(s.withdrawals) || 0), 0);
+      profitAmount = monthSnaps.reduce((acc, s) => acc + (Number(s.profit_amount) || 0), 0);
+      profitPercent = initialBalance > 0 ? (profitAmount / initialBalance) * 100 : 0;
+      cdiBenchmark = monthSnaps[0]?.cdi_benchmark || 0.95;
+      ipcaBenchmark = monthSnaps[0]?.ipca_benchmark || 0.40;
+      ibovespaBenchmark = monthSnaps[0]?.ibovespa_benchmark || 1.20;
     } else {
       deposits = txDeposits;
       withdrawals = txWithdrawals;
@@ -257,14 +258,14 @@ export function MonthlyYieldReport({
 
     const monthlyBreakdown = monthNames.map((mNum) => {
       const ym = `${selectedYear}-${mNum}`;
-      const snap = snapshots.find((s) => s.year_month === ym);
+      const monthSnaps = snapshots.filter((s) => s.year_month === ym);
 
       const txs = transactions.filter((t) => t.date && t.date.startsWith(ym));
-      const mDeposits = snap
-        ? snap.deposits
+      const mDeposits = monthSnaps.length > 0
+        ? monthSnaps.reduce((acc, s) => acc + (Number(s.deposits) || 0), 0)
         : txs.filter((t) => t.type === "aporte").reduce((a, t) => a + t.amount, 0);
-      const mWithdrawals = snap
-        ? snap.withdrawals
+      const mWithdrawals = monthSnaps.length > 0
+        ? monthSnaps.reduce((acc, s) => acc + (Number(s.withdrawals) || 0), 0)
         : txs.filter((t) => t.type === "resgate").reduce((a, t) => a + t.amount, 0);
 
       const mDivs = dividends
@@ -279,14 +280,15 @@ export function MonthlyYieldReport({
       let mIbov = 1.00;
       let hasData = false;
 
-      if (snap) {
+      if (monthSnaps.length > 0) {
         hasData = true;
-        mProfitAmount = snap.profit_amount;
-        mProfitPercent = snap.profit_percent;
-        mFinalBalance = snap.final_balance;
-        mCdi = snap.cdi_benchmark || 0.95;
-        mIpca = snap.ipca_benchmark || 0.40;
-        mIbov = snap.ibovespa_benchmark || 1.00;
+        mProfitAmount = monthSnaps.reduce((acc, s) => acc + (Number(s.profit_amount) || 0), 0);
+        mFinalBalance = monthSnaps.reduce((acc, s) => acc + (Number(s.final_balance) || 0), 0);
+        const mInitial = monthSnaps.reduce((acc, s) => acc + (Number(s.initial_balance) || 0), 0);
+        mProfitPercent = mInitial > 0 ? (mProfitAmount / mInitial) * 100 : 0;
+        mCdi = monthSnaps[0]?.cdi_benchmark || 0.95;
+        mIpca = monthSnaps[0]?.ipca_benchmark || 0.40;
+        mIbov = monthSnaps[0]?.ibovespa_benchmark || 1.00;
       } else if (ym === currentYM) {
         hasData = true;
         mProfitAmount = monthReportData.profitAmount;
@@ -307,8 +309,12 @@ export function MonthlyYieldReport({
         totalWithdrawals += mWithdrawals;
         totalDividends += mDivs;
 
-        if (initialYearBalance === 0 && (snap?.initial_balance || mFinalBalance)) {
-          initialYearBalance = snap?.initial_balance || mFinalBalance;
+        const firstInitial = monthSnaps.length > 0
+          ? monthSnaps.reduce((acc, s) => acc + (Number(s.initial_balance) || 0), 0)
+          : mFinalBalance;
+
+        if (initialYearBalance === 0 && (firstInitial > 0 || mFinalBalance > 0)) {
+          initialYearBalance = firstInitial || mFinalBalance;
         }
         if (mFinalBalance > 0) {
           finalYearBalance = mFinalBalance;
