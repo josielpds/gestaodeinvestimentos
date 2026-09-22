@@ -68,8 +68,9 @@ function RelatoriosPage() {
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  const summary = summarize(investments, transactions);
+  const summary = summarize(investments, transactions, snapshots);
   const totalNet = summary.totalNet;
+  const totalGross = summary.totalGross;
   const todayStr = todayISO();
 
   // Relatório de Renda Variável (Proventos & Tickers)

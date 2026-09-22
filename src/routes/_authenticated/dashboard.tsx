@@ -69,7 +69,11 @@ function DashboardPage() {
   const [openOfDialog, setOpenOfDialog] = useState(false);
 
   // Resumo Geral Consolidado
-  const summary = summarize(investments, transactions);
+  const summary = summarize(investments, transactions, snapshots);
+  const effectiveTotalGross = summary.totalGross;
+  const effectiveTotalNet = summary.totalNet;
+  const effectiveGrossProfit = summary.grossProfit;
+  const effectiveGrossProfitPercent = summary.grossProfitPercent;
 
   // Consolidação Dinâmica de Renda Fixa (Planilha 1 Investimentos + Planilha 2 Saldo Conta Dia a Dia / CNPJ)
   const currentYM = currentYearMonth();
@@ -81,7 +85,9 @@ function DashboardPage() {
       i.institution.toLowerCase().includes("cnpj"),
   );
   const cnpjIds = new Set(cnpjInvs.map((i) => i.id));
-  const cnpjSnapshots = snapshots.filter((s) => s.investment_id && cnpjIds.has(s.investment_id));
+  const cnpjSnapshots = snapshots.filter(
+    (s) => s.investment_id && (cnpjIds.has(s.investment_id) || cnpjInvs.length === 0),
+  );
 
   const latestRfSnap =
     rfSnapshots.find((s) => s.year_month === currentYM) ??
@@ -93,15 +99,8 @@ function DashboardPage() {
   const rfSpreadsheetFinal = Number(latestRfSnap?.final_balance) || 0;
   const cnpjSpreadsheetFinal = Number(latestCnpjSnap?.final_balance) || 0;
   const totalSpreadsheetRF = rfSpreadsheetFinal + cnpjSpreadsheetFinal;
-
-  const rfSummary = summarizeCategory("renda_fixa", investments, transactions);
-  const effectiveRfGross = totalSpreadsheetRF > 0 ? totalSpreadsheetRF : rfSummary.totalGross;
-  const rfDifference = effectiveRfGross - rfSummary.totalGross;
-  const effectiveTotalGross = summary.totalGross + rfDifference;
-  const effectiveTotalNet = summary.totalNet + rfDifference;
-  const effectiveGrossProfit = summary.grossProfit + rfDifference;
-  const effectiveGrossProfitPercent =
-    summary.totalInvested > 0 ? (effectiveGrossProfit / summary.totalInvested) * 100 : summary.grossProfitPercent;
+  const effectiveRfGross =
+    summary.byCategory.find((c) => c.key === "renda_fixa")?.value || totalSpreadsheetRF;
 
   // Resumo Específico Renda Variável
   const rvSummary = summarizeCategory("renda_variavel", investments, transactions);
@@ -132,8 +131,8 @@ function DashboardPage() {
   // Dados para gráficos do Consolidado
   const categoryChartData = summary.byCategory.map((c) => ({
     name: c.label,
-    value: c.key === "renda_fixa" ? effectiveRfGross : c.value,
-    percent: effectiveTotalGross > 0 ? ((c.key === "renda_fixa" ? effectiveRfGross : c.value) / effectiveTotalGross) * 100 : 0,
+    value: c.value,
+    percent: c.percent,
     key: c.key,
   }));
 
@@ -141,6 +140,7 @@ function DashboardPage() {
     name: inst.institution,
     valor: inst.valor,
   }));
+
 
   const snapshotEvolutionData = snapshots.slice(-6).map((s) => ({
     mes: monthLabel(s.year_month),

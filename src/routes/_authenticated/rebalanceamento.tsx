@@ -15,9 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { StatCard } from "@/components/stat-card";
-import { useInvestments, useSaveTarget, useTargets, useTransactions } from "@/lib/data";
+import { useInvestments, useSaveTarget, useSnapshots, useTargets, useTransactions } from "@/lib/data";
 import {
   CATEGORIES,
+  CATEGORY_BADGES,
   CATEGORY_LABELS,
   formatCurrency,
   formatPercent,
@@ -26,7 +27,7 @@ import {
 
 export const Route = createFileRoute("/_authenticated/rebalanceamento")({
   head: () => ({
-    meta: [{ title: "Rebalanceamento & Metas — PatrimônioInvest" }],
+    meta: [{ title: "Rebalanceamento de Carteira — PatrimônioInvest" }],
   }),
   component: RebalanceamentoPage,
 });
@@ -34,10 +35,11 @@ export const Route = createFileRoute("/_authenticated/rebalanceamento")({
 function RebalanceamentoPage() {
   const { data: investments = [] } = useInvestments();
   const { data: transactions = [] } = useTransactions();
+  const { data: snapshots = [] } = useSnapshots();
   const { data: targets = [] } = useTargets();
   const saveTargets = useSaveTarget();
 
-  const summary = summarize(investments, transactions);
+  const summary = summarize(investments, transactions, snapshots);
   const totalGross = summary.totalGross;
 
   // Estado local para metas percentuais

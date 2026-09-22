@@ -288,6 +288,7 @@ export interface PortfolioSummary {
 export function summarize(
   investments: Investment[],
   transactions: Transaction[] = [],
+  snapshots: Snapshot[] = [],
 ): PortfolioSummary {
   const active = investments.filter((i) => i.status === "ativo");
   let totalGross = 0;
@@ -298,19 +299,77 @@ export function summarize(
   const catMap: Record<string, number> = {};
   const instMap: Record<string, number> = {};
 
+  // 1. Processar ativos não-renda fixa da tabela de investimentos
   for (const inv of active) {
-    const m = metricsFor(inv, transactions);
-    totalGross += inv.current_balance;
-    totalInvested += m.investedTotal;
-    totalIof += m.estimatedIof;
-    totalIr += m.estimatedTax;
-    totalTax += m.totalTax;
-    catMap[inv.category] = (catMap[inv.category] ?? 0) + inv.current_balance;
-    const inst = inv.institution || "Outras";
-    instMap[inst] = (instMap[inst] ?? 0) + inv.current_balance;
+    if (inv.category !== "renda_fixa") {
+      const m = metricsFor(inv, transactions);
+      totalGross += inv.current_balance;
+      totalInvested += m.investedTotal;
+      totalIof += m.estimatedIof;
+      totalIr += m.estimatedTax;
+      totalTax += m.totalTax;
+      catMap[inv.category] = (catMap[inv.category] ?? 0) + inv.current_balance;
+      const inst = inv.institution || "Outras";
+      instMap[inst] = (instMap[inst] ?? 0) + inv.current_balance;
+    }
   }
 
+  // 2. Processar Renda Fixa (Planilhas e/ou Ativos)
+  const currentYM = currentYearMonth();
+  const rfSnapshots = snapshots.filter((s) => !s.investment_id || s.investment_id === "null");
+  const cnpjInvs = investments.filter(
+    (i) =>
+      i.name.toLowerCase().includes("cnpj") ||
+      i.name.toLowerCase().includes("conta dia a dia") ||
+      i.institution.toLowerCase().includes("cnpj"),
+  );
+  const cnpjIds = new Set(cnpjInvs.map((i) => i.id));
+  const cnpjSnapshots = snapshots.filter(
+    (s) => s.investment_id && (cnpjIds.has(s.investment_id) || cnpjInvs.length === 0),
+  );
+
+  // Snapshot mais recente do ano corrente ou geral
+  const latestRfSnap =
+    rfSnapshots.find((s) => s.year_month === currentYM) ??
+    [...rfSnapshots].sort((a, b) => b.year_month.localeCompare(a.year_month))[0];
+  const latestCnpjSnap =
+    cnpjSnapshots.find((s) => s.year_month === currentYM) ??
+    [...cnpjSnapshots].sort((a, b) => b.year_month.localeCompare(a.year_month))[0];
+
+  const rfFinal = Number(latestRfSnap?.final_balance) || 0;
+  const cnpjFinal = Number(latestCnpjSnap?.final_balance) || 0;
+  const totalSpreadsheetRF = rfFinal + cnpjFinal;
+
+  const rfInitial = Number(latestRfSnap?.initial_balance) || 0;
+  const cnpjInitial = Number(latestCnpjSnap?.initial_balance) || 0;
+  const totalSpreadsheetInitial = rfInitial + cnpjInitial;
+
+  // Fallback caso não haja snapshots cadastrados
+  const rfInvestments = active.filter((i) => i.category === "renda_fixa");
+  const rfInvestmentsGross = rfInvestments.reduce((acc, i) => acc + i.current_balance, 0);
+  const rfInvestmentsInvested = rfInvestments.reduce(
+    (acc, i) => acc + metricsFor(i, transactions).investedTotal,
+    0,
+  );
+
+  const effectiveRfGross = totalSpreadsheetRF > 0 ? totalSpreadsheetRF : rfInvestmentsGross;
+  const effectiveRfInvested =
+    totalSpreadsheetInitial > 0
+      ? totalSpreadsheetInitial
+      : rfInvestmentsInvested > 0
+        ? rfInvestmentsInvested
+        : effectiveRfGross;
+
+  totalGross += effectiveRfGross;
+  totalInvested += effectiveRfInvested;
+  catMap["renda_fixa"] = effectiveRfGross;
+  if (effectiveRfGross > 0) {
+    instMap["Renda Fixa & Contas"] = (instMap["Renda Fixa & Contas"] ?? 0) + effectiveRfGross;
+  }
+
+  // Como em renda fixa não há imposto (já informado líquido), totalTax vem somente de RV/outros
   const totalNet = totalGross - totalTax;
+
   return {
     totalGross,
     totalInvested,
@@ -320,7 +379,8 @@ export function summarize(
     totalNet,
     grossProfit: totalGross - totalInvested,
     netProfit: totalNet - totalInvested,
-    grossProfitPercent: totalInvested > 0 ? ((totalGross - totalInvested) / totalInvested) * 100 : 0,
+    grossProfitPercent:
+      totalInvested > 0 ? ((totalGross - totalInvested) / totalInvested) * 100 : 0,
     byCategory: CATEGORIES.filter((c) => (catMap[c] ?? 0) > 0).map((c) => ({
       key: c,
       label: CATEGORY_LABELS[c] ?? c,
@@ -332,6 +392,7 @@ export function summarize(
       .sort((a, b) => b.valor - a.valor),
   };
 }
+
 
 export interface CategorySummary {
   category: string;

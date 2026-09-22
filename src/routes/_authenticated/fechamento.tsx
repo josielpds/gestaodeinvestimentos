@@ -64,7 +64,7 @@ function FechamentoPage() {
   const [selectedSnapshot, setSelectedSnapshot] = useState<Snapshot | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  const summary = summarize(investments, transactions);
+  const summary = summarize(investments, transactions, snapshots);
 
   // Ordenação cronológica para histórico
   const sortedSnapshots = useMemo(() => {

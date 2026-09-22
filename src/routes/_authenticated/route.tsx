@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { useInvestments, useTransactions } from "@/lib/data";
+import { useInvestments, useSnapshots, useTransactions } from "@/lib/data";
 import { formatCurrency, formatPercent, summarize } from "@/lib/finance";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -38,7 +38,8 @@ function AppShell() {
   const queryClient = useQueryClient();
   const { data: investments = [] } = useInvestments();
   const { data: transactions = [] } = useTransactions();
-  const summary = summarize(investments, transactions);
+  const { data: snapshots = [] } = useSnapshots();
+  const summary = summarize(investments, transactions, snapshots);
 
   async function handleSignOut() {
     await queryClient.cancelQueries();
